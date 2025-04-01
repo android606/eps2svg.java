@@ -16,28 +16,59 @@ import java.util.Stack;
 import java.util.Locale; // Required for String.format locale independence
 import java.awt.geom.Point2D; // Import Point2D
 import java.awt.geom.Rectangle2D;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.logging.LogRecord;
+import java.util.logging.SimpleFormatter;
+import java.util.logging.ConsoleHandler; // Added import
 
 public class EpsToSvgConverter {
     private static int clipIdCounter = 0;
     private static Map<String, String> clipPathMap = new HashMap<>();
 
+    // NEW: Inner class to hold path data and style
+    private static class SvgPath {
+        String pathData;
+        String style;
+        double[] ctm; // CTM active when this path was created
+
+        SvgPath(String pathData, String style, double[] ctm) {
+            this.pathData = pathData;
+            this.style = style;
+            this.ctm = ctm.clone();
+        }
+    }
+
     private static class GraphicsState implements Cloneable {
-        // Current Transformation Matrix [a b c d tx ty] equivalent to:
-        // [a c tx]
-        // [b d ty]
-        // [0 0 1 ]
-        public double[] ctm = {1.0, 0.0, 0.0, 1.0, 0.0, 0.0}; // Identity matrix
-        public double lineWidth = 1.0;
-        public String strokeColor = "black"; // Default black
-        public String fillColor = "none";    // Default none
-        private double[] bbox; // BoundingBox (llx, lly, urx, ury)
+        double[] ctm; // Current Transformation Matrix [a b c d tx ty]
+        double lineWidth;
+        String strokeColor;
+        String fillColor;
+        // NEW Graphics State properties
+        double lineCap;    // 0=butt, 1=round, 2=square
+        double lineJoin;   // 0=miter, 1=round, 2=bevel
+        double miterLimit;
+        double[] dashArray; // null if solid
+        double dashOffset;
+        // End NEW
+        double[] bbox; // Bounding box [llx lly urx ury]
         public String clipId = null; // The ID of the current clip path, if any
         public boolean useEvenOddFill = false; // By default use non-zero winding rule
         
-        public GraphicsState(double[] bbox) {
-            this.bbox = (bbox != null && bbox.length == 4) ? bbox : new double[]{0, 0, 1, 1};
+        GraphicsState(double[] bbox) {
+            this.ctm = new double[]{1, 0, 0, 1, 0, 0}; // Initialize CTM to identity
+            this.lineWidth = 1.0;
+            this.strokeColor = "rgb(0,0,0)"; // Default black stroke
+            this.fillColor = "rgb(0,0,0)";   // Default black fill
+            // Initialize NEW properties
+            this.lineCap = 0;
+            this.lineJoin = 0;
+            this.miterLimit = 10.0; // Default miter limit in PostScript/PDF/SVG
+            this.dashArray = null;
+            this.dashOffset = 0;
+            // End Initialize NEW
+            this.bbox = (bbox != null) ? bbox.clone() : null;
         }
         
         @Override
@@ -46,6 +77,8 @@ public class EpsToSvgConverter {
                 GraphicsState clone = (GraphicsState) super.clone();
                 // Deep copy the arrays
                 clone.ctm = this.ctm.clone();
+                // Clone dash array if it exists
+                clone.dashArray = (this.dashArray != null) ? this.dashArray.clone() : null;
                 // bbox is shared since it doesn't change after initialization
                 return clone;
             } catch (CloneNotSupportedException e) {
@@ -53,6 +86,7 @@ public class EpsToSvgConverter {
             }
         }
         
+        // NEW: Helper to format RGB
         private String rgbColor(double r, double g, double b) {
             r = Math.max(0, Math.min(1, r));
             g = Math.max(0, Math.min(1, g));
@@ -61,7 +95,7 @@ public class EpsToSvgConverter {
                 (int)(r * 255), (int)(g * 255), (int)(b * 255));
         }
         
-        // Converts 0-1 range CMYK to "rgb(r,g,b)" string
+        // NEW: Converts 0-1 range CMYK to "rgb(r,g,b)" string
         public String cmykColor(double c, double m, double y, double k) {
             double r = (1.0 - c) * (1.0 - k);
             double g = (1.0 - m) * (1.0 - k);
@@ -69,1012 +103,816 @@ public class EpsToSvgConverter {
             return rgbColor(r, g, b); // Reuse the rgbColor method for formatting
         }
         
-        // Transform from current local PS coordinates to global PS coordinates using the CTM
-        double toGlobalX(double localX) {
-            // x' = a*x + c*y + tx
-            // Note: We assume y=0 for X transformation based on PostScript model for individual coords?
-            // Let's refine this: CTM applies to the point (x,y)
-            // For simplicity in path building, let's apply the CTM directly there.
-            // This method might not be needed, or needs x AND y.
-            // Let's transform the point (localX, localY) instead.
-            return ctm[0] * localX + ctm[2] * 0 + ctm[4]; // Incorrect if y is non-zero
+        // NEW: Converts 0-1 range Gray to "rgb(r,g,b)" string
+        public String grayColor(double gray) {
+            return rgbColor(gray, gray, gray);
         }
-        double toGlobalY(double localY) {
-            // y' = b*x + d*y + ty
-            return ctm[1] * 0 + ctm[3] * localY + ctm[5]; // Incorrect if x is non-zero
-        }
-
-        // Apply current transformation matrix to a point
+        
         public Point2D.Double transformPoint(double x, double y) {
-            double newX = ctm[0] * x + ctm[2] * y + ctm[4];
-            double newY = ctm[1] * x + ctm[3] * y + ctm[5];
-            return new Point2D.Double(newX, newY);
+            double[] transformed = transform(x, y);
+            return new Point2D.Double(transformed[0], transformed[1]);
         }
 
-        // Helper function for matrix multiplication: NewCTM = M * OldCTM
-        public void concatMatrix(double[] m) { // m = [a b c d tx ty]
-            double a1 = ctm[0], b1 = ctm[1], c1 = ctm[2], d1 = ctm[3], tx1 = ctm[4], ty1 = ctm[5];
-            double a2 = m[0], b2 = m[1], c2 = m[2], d2 = m[3], tx2 = m[4], ty2 = m[5];
+        public double[] transform(double x, double y) {
+            // Apply CTM transformation
+            double[] transformed = new double[2];
+            transformed[0] = ctm[0] * x + ctm[2] * y + ctm[4];
+            transformed[1] = ctm[1] * x + ctm[3] * y + ctm[5];
 
-            // Perform matrix multiplication according to PostScript spec
-            // For PostScript, the CTM is applied to the coordinates as [x y 1] * CTM
-            // So new matrix is concatenated as new_CTM = old_CTM * matrix
-            double new_a = a1 * a2 + c1 * b2;
-            double new_b = b1 * a2 + d1 * b2;
-            double new_c = a1 * c2 + c1 * d2;
-            double new_d = b1 * c2 + d1 * d2;
-            double new_tx = a1 * tx2 + c1 * ty2 + tx1;
-            double new_ty = b1 * tx2 + d1 * ty2 + ty1;
-            
-            ctm[0] = new_a;
-            ctm[1] = new_b;
-            ctm[2] = new_c;
-            ctm[3] = new_d;
-            ctm[4] = new_tx;
-            ctm[5] = new_ty;
+            // It should only reflect the PostScript CTM.
+            // The global SVG transform will handle Y-flip.
+            // double scale = 10.0; // Example scale - REMOVE
+            // transformed[0] = (transformed[0] - bbox[0]) * scale; // REMOVE
+            // transformed[1] = (bbox[3] - transformed[1]) * scale; // REMOVE
+
+            return transformed;
         }
 
-        // Transform from global PS coordinates to SVG coordinates within the viewBox
-        double mapToSvgX(double globalX) {
-            // Global X directly maps to SVG X because viewBox's llx handles the origin
-            return globalX;
+        // Helper for matrix multiplication: result = a * b
+        // Assumes a = [a,b,c,d,e,f] -> [[a,c,e],[b,d,f],[0,0,1]]
+        // Assumes b = [a',b',c',d',e',f'] -> [[a',c',e'],[b',d',f'],[0,0,1]]
+        // C = A * B
+        private double[] multiplyMatrix(double[] a, double[] b) {
+            double a_a=a[0], a_b=a[1], a_c=a[2], a_d=a[3], a_e=a[4], a_f=a[5];
+            double b_a=b[0], b_b=b[1], b_c=b[2], b_d=b[3], b_e=b[4], b_f=b[5];
+            double[] result = new double[6];
+
+            // Rotational/Scaling part (Corrected for C = A * B)
+            result[0] = a_a * b_a + a_c * b_b; // c0 = a*a' + c*b'
+            result[1] = a_b * b_a + a_d * b_b; // c1 = b*a' + d*b'
+            result[2] = a_a * b_c + a_c * b_d; // c2 = a*c' + c*d'
+            result[3] = a_b * b_c + a_d * b_d; // c3 = b*c' + d*d'
+
+            // Translational part (Corrected for C = A * B)
+            result[4] = a_a * b_e + a_c * b_f + a_e; // c4 = a*e' + c*f' + e
+            result[5] = a_b * b_e + a_d * b_f + a_f; // c5 = b*e' + d*f' + f
+
+            return result;
         }
-        double mapToSvgY(double globalY) {
-            // Flip Y relative to viewBox origin (lly) and height (ury - lly)
-            // y_svg = lly + (ury - y_ps_global)
-            return bbox[1] + (bbox[3] - globalY);
+
+        // Concatenate a matrix with the CTM: CTM = matrix * CTM
+        public void concat(double[] matrix) {
+            this.ctm = multiplyMatrix(matrix, this.ctm);
+        }
+
+        public void translate(double tx, double ty) {
+            double[] translationMatrix = {1, 0, 0, 1, tx, ty};
+            // CTM = translationMatrix * CTM
+            this.ctm = multiplyMatrix(translationMatrix, this.ctm);
+        }
+
+        public void scale(double sx, double sy) {
+            double[] scaleMatrix = {sx, 0, 0, sy, 0, 0};
+            // CTM = scaleMatrix * CTM
+             this.ctm = multiplyMatrix(scaleMatrix, this.ctm);
+       }
+
+        public void rotate(double angle) {
+            double radians = Math.toRadians(angle);
+            double cos = Math.cos(radians);
+            double sin = Math.sin(radians);
+            double[] rotationMatrix = {cos, sin, -sin, cos, 0, 0};
+            // CTM = rotationMatrix * CTM
+            this.ctm = multiplyMatrix(rotationMatrix, this.ctm);
+        }
+        
+        // Get a copy of the current transformation matrix
+        public double[] getCtm() {
+             return this.ctm.clone();
+        }
+
+        public double[] getBoundingBox() {
+            return bbox;
         }
     }
     
-    private static class PathBuilder {
-        private GraphicsState currentGS;
-        // Store the *last written* SVG coordinates
-        private double lastSvgX = 0, lastSvgY = 0;
-        private boolean pathStarted = false;
-        private StringBuilder pathData = new StringBuilder();
+    private class PathBuilder {
+        private final StringBuilder path = new StringBuilder();
+        private boolean empty = true;
+
+        PathBuilder() {
+            // REMOVED: this.stateProvider = stateProvider;
+        }
+
+        public void moveTo(double x, double y) {
+            // Use raw coordinates
+            // Point2D.Double transformed = stateProvider.transformPoint(x, y);
+            path.append(String.format(Locale.ROOT, "M %.3f,%.3f", x, y));
+            empty = false;
+        }
+
+        public void lineTo(double x, double y) {
+            // Use raw coordinates
+            // Point2D.Double transformed = stateProvider.transformPoint(x, y);
+            path.append(String.format(Locale.ROOT, " L %.3f,%.3f", x, y));
+        }
+
+        public void curveTo(double x1, double y1, double x2, double y2, double x3, double y3) {
+            // Use raw coordinates
+            // Point2D.Double t1 = stateProvider.transformPoint(x1, y1);
+            // Point2D.Double t2 = stateProvider.transformPoint(x2, y2);
+            // Point2D.Double t3 = stateProvider.transformPoint(x3, y3);
+            path.append(String.format(Locale.ROOT, " C %.3f,%.3f %.3f,%.3f %.3f,%.3f",
+                x1, y1, x2, y2, x3, y3)); // Use raw x, y
+        }
         
-        // Save the last point for relative operations
-        private double lastX, lastY;
-        private boolean hasLastPoint = false;
-
-        public PathBuilder(GraphicsState gs) {
-            this.currentGS = gs;
-            this.pathData = new StringBuilder();
-            this.pathStarted = false;
-        }
-
-        public void updateGraphicsState(GraphicsState newGS) {
-            this.currentGS = newGS;
-        }
-
-        // Pass bbox for mapping calculation
-        public void moveTo(double x, double y, GraphicsState gs, double[] bbox) {
-            // 1. Apply internal CTM
-            System.out.println("DEBUG moveTo: Input (" + x + "," + y + ")");
-            System.out.println("DEBUG CTM: [" + 
-                gs.ctm[0] + " " + gs.ctm[1] + " " + 
-                gs.ctm[2] + " " + gs.ctm[3] + " " + 
-                gs.ctm[4] + " " + gs.ctm[5] + "]");
-            
-            Point2D.Double transformedPoint = gs.transformPoint(x, y);
-            double psX = transformedPoint.getX();
-            double psY = transformedPoint.getY();
-            System.out.println("DEBUG transformed point: (" + psX + "," + psY + ")");
-
-            // 2. Convert to SVG coordinates with proper bounding box adjustment
-            double svgX = psX;
-            double svgY = psY;
-            
-            // Apply proper coordinate transformation for SVG
-            // Adjust X coordinate by subtracting the left edge of the bounding box
-            svgX = svgX - bbox[0];
-            
-            // Adjust Y coordinate by inverting it relative to the bounding box height
-            // This is because in PostScript Y grows upward, in SVG Y grows downward
-            svgY = bbox[3] - svgY;
-            
-            System.out.println("DEBUG final SVG point: (" + svgX + "," + svgY + ")");
-
-            lastSvgX = svgX;
-            lastSvgY = svgY;
-            
-            // Start a new path - clear previous data
-            pathData = new StringBuilder();
-            pathData.append(String.format(Locale.ROOT, "M %.6f %.6f", svgX, svgY));
-            pathStarted = true;
-            
-            // Save the last point for relative operations
-            lastX = x;
-            lastY = y;
-            hasLastPoint = true;
-        }
-
-        // Pass bbox for mapping calculation
-        public void lineTo(double x, double y, GraphicsState gs, double[] bbox) {
-            if (!pathStarted) {
-                 System.err.println("Warning: lineTo called without preceding moveto. Using last point as start.");
-                 // Implicitly move to the last SVG point if path wasn't started?
-                 // This might still be problematic. Ideally, EPS should always have moveto.
-                 pathData.append(String.format(Locale.ROOT, "M %.6f %.6f ", lastSvgX, lastSvgY));
-                 pathStarted = true;
-            }
-            // 1. Apply internal CTM
-            System.out.println("DEBUG lineTo: Input (" + x + "," + y + ")");
-            System.out.println("DEBUG CTM: [" + 
-                gs.ctm[0] + " " + gs.ctm[1] + " " + 
-                gs.ctm[2] + " " + gs.ctm[3] + " " + 
-                gs.ctm[4] + " " + gs.ctm[5] + "]");
-            
-            Point2D.Double transformedPoint = gs.transformPoint(x, y);
-            double psX = transformedPoint.getX();
-            double psY = transformedPoint.getY();
-            System.out.println("DEBUG transformed point: (" + psX + "," + psY + ")");
-
-            // 2. Convert to SVG coordinates with proper bounding box adjustment
-            double svgX = psX;
-            double svgY = psY;
-            
-            // Apply proper coordinate transformation for SVG
-            // Adjust X coordinate by subtracting the left edge of the bounding box
-            svgX = svgX - bbox[0];
-            
-            // Adjust Y coordinate by inverting it relative to the bounding box height
-            // This is because in PostScript Y grows upward, in SVG Y grows downward
-            svgY = bbox[3] - svgY;
-            
-            System.out.println("DEBUG final SVG point: (" + svgX + "," + svgY + ")");
-
-            lastSvgX = svgX;
-            lastSvgY = svgY;
-            pathData.append(String.format(Locale.ROOT, " L %.6f %.6f", svgX, svgY));
-            
-            // Save the last point for relative operations
-            lastX = x;
-            lastY = y;
-            hasLastPoint = true;
-        }
-
         public void closePath() {
-            if (pathStarted) {
-                pathData.append(" Z");
-            }
+            path.append(" Z");
         }
-
-        public String toString() {
-            return pathData.length() > 0 ? pathData.toString().trim() : "";
-        }
-
+        
         public boolean isEmpty() {
-            boolean empty = pathData.length() == 0 || !pathStarted;
-            System.out.println("DEBUG PathBuilder.isEmpty(): pathData.length=" + pathData.length() + ", pathStarted=" + pathStarted + ", returning " + empty);
             return empty;
         }
-        
-        public boolean hasPathStarted() {
-            return pathStarted;
-        }
-        
-        public void clear() {
-            pathData = new StringBuilder();
-            pathStarted = false;
-        }
-        
-        // buildPath needs to format the output correctly for SVG <path>
-        // It should now ONLY return the raw path data string (M ..., L ..., Z)
-        // The fill/stroke attributes will be applied to the <path> element itself.
-        public String buildPathDataString() {
-            return pathData.length() > 0 ? pathData.toString().trim() : "";
-        }
 
-        // Get the last point coordinates
-        public double[] getLastPoint() {
-            if (hasLastPoint) {
-                return new double[] { lastX, lastY };
-            }
-            return null;
-        }
-
-        public void curveTo(double x1, double y1, double x2, double y2, double x3, double y3, 
-                            GraphicsState gs, double[] bbox) {
-            if (!pathStarted) {
-                System.err.println("Warning: curveTo called without preceding moveto. Using last point as start.");
-                pathData.append(String.format(Locale.ROOT, "M %.6f %.6f ", lastSvgX, lastSvgY));
-                pathStarted = true;
-            }
-            
-            // 1. Apply CTM transformation to all control points
-            System.out.println("DEBUG curveTo: Control 1 (" + x1 + "," + y1 + ")");
-            System.out.println("DEBUG curveTo: Control 2 (" + x2 + "," + y2 + ")");
-            System.out.println("DEBUG curveTo: End point (" + x3 + "," + y3 + ")");
-            
-            Point2D.Double cp1 = gs.transformPoint(x1, y1);
-            Point2D.Double cp2 = gs.transformPoint(x2, y2);
-            Point2D.Double ep = gs.transformPoint(x3, y3);
-            
-            // 2. Convert to SVG coordinates
-            double cp1x = cp1.getX() - bbox[0];
-            double cp1y = bbox[3] - cp1.getY();
-            
-            double cp2x = cp2.getX() - bbox[0];
-            double cp2y = bbox[3] - cp2.getY();
-            
-            double epx = ep.getX() - bbox[0];
-            double epy = bbox[3] - ep.getY();
-            
-            // 3. Append to path data
-            pathData.append(String.format(Locale.ROOT, " C %.6f %.6f %.6f %.6f %.6f %.6f", 
-                    cp1x, cp1y, cp2x, cp2y, epx, epy));
-            
-            // Save the last point for relative operations
-            lastX = x3;
-            lastY = y3;
-            hasLastPoint = true;
-            
-            // Update the last SVG coordinates
-            lastSvgX = epx;
-            lastSvgY = epy;
+        @Override
+        public String toString() {
+            return path.toString();
         }
     }
     
-    private File epsFile;
-    private File svgFile;
-    private List<String> paths;
-    private PathBuilder currentPath;
-    private double viewBoxMinX, viewBoxMinY, viewBoxWidth, viewBoxHeight;
+    private double viewBoxMinX, viewBoxMinY;
+    private double viewBoxWidth, viewBoxHeight;
     private double documentHeight; // Store document height for Y-coordinate flipping
     private Stack<GraphicsState> gsStack;
-    private Stack<String> stack;
+    private Stack<Double> stack;
     private GraphicsState currentState;
+    private PathBuilder currentPath;
+    private List<SvgPath> paths; // List type is SvgPath
+    private boolean pathStarted;
+    private double lastX, lastY;
+    private double[] ctmAtPathStart; // NEW: Store CTM at the start of a path
+    private boolean justProcessedArrayEndMarker = false; // Flag for setdash '[] 0 d' detection
+    private boolean processBounds = false; // NEW: Flag to control bounds calculation
 
-    /**
-     * Constructor that takes EPS input and SVG output files.
-     */
-    public EpsToSvgConverter(File epsFile, File svgFile) {
-        this.epsFile = epsFile;
-        this.svgFile = svgFile;
-        this.paths = new ArrayList<>();
-        this.gsStack = new Stack<>();
-        this.stack = new Stack<>();
-        this.currentState = new GraphicsState(null);
-        this.currentPath = new PathBuilder(currentState);
-        viewBoxMinX = viewBoxMinY = 0;
-        viewBoxWidth = viewBoxHeight = 612;
-        documentHeight = 792; // Default - will be updated when BoundingBox is parsed
+    // Fields for calculated bounding box
+    private double overallMinX, overallMinY, overallMaxX, overallMaxY;
+    private double overallMaxStrokeWidth;
+    private boolean boundsInitialized;
+
+    public EpsToSvgConverter() {
+        // Removed initialization here, will be done in convert
     }
 
-    public void convert() throws IOException {
-        clipIdCounter = 0; // Reset counter for each conversion
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(epsFile))) {
-            // Parse EPS header to extract bounding box
-            double[] bbox = parseHeader(reader);
-            
-            if (bbox == null) {
-                throw new IOException("Could not find bounding box in EPS file");
-            }
-            
-            // Process all drawing commands and generate SVG paths
-            List<String> svgPaths = processCommands(reader, bbox);
-            
-            // Write SVG output file
-            writeSvgFile(svgPaths, bbox, svgFile.getAbsolutePath());
-            
-            System.out.println("Conversion completed successfully!");
-        } catch (IOException e) {
-            System.err.println("Error processing EPS file: " + e.getMessage());
-            throw e;
-        }
+    // Helper method to check for identity matrix (within tolerance)
+    private boolean isIdentityMatrix(double[] m) {
+        if (m == null || m.length != 6) return false;
+        double tolerance = 1e-6;
+        return Math.abs(m[0] - 1.0) < tolerance && Math.abs(m[1]) < tolerance &&
+               Math.abs(m[2]) < tolerance && Math.abs(m[3] - 1.0) < tolerance &&
+               Math.abs(m[4]) < tolerance && Math.abs(m[5]) < tolerance;
     }
 
-    private static List<String> processCommands(BufferedReader reader, double[] bbox) throws IOException {
-        Stack<GraphicsState> gsStack = new Stack<>();
-        Stack<String> stack = new Stack<>();
-        GraphicsState currentState = new GraphicsState(bbox);
-        PathBuilder currentPath = new PathBuilder(currentState);
-        
-        List<String> paths = new ArrayList<>();
-        
-        int lineNumber = 0;
-        String line;
-        while ((line = reader.readLine()) != null) {
-            lineNumber++;
-            
-            // Skip comments and empty lines
-            if (line.trim().startsWith("%") || line.trim().isEmpty()) {
-                System.out.println("DEBUG line " + lineNumber + ": Skipping comment or empty line: '" + line + "'");
-                continue;
-            }
-            
-            System.out.println("DEBUG line " + lineNumber + ": Processing: '" + line + "'");
-            
-            // Handle arrays like [1 0 0 1 0 0]
-            if (line.contains("[") && line.contains("]")) {
-                int startBracket = line.indexOf("[");
-                int endBracket = line.indexOf("]", startBracket);
-                
-                if (startBracket >= 0 && endBracket > startBracket) {
-                    String array = line.substring(startBracket + 1, endBracket).trim();
-                    String[] elements = array.split("\\s+");
-                    
-                    System.out.println("DEBUG line " + lineNumber + ": Processing array: '" + line.substring(startBracket, endBracket + 1) + "'");
-                    
-                    // Push array elements onto the stack
-                    for (String element : elements) {
-                        if (!element.isEmpty()) {
-                            System.out.println("DEBUG line " + lineNumber + ": Pushed array element to stack: '" + element + "'");
-                            stack.push(element);
+    public void convert(String inputFile, String outputFile) throws IOException {
+        // --- Initialization ---
+        gsStack = new Stack<>();
+        stack = new Stack<>();
+        paths = new ArrayList<>();
+        currentPath = new PathBuilder();
+        pathStarted = false;
+        lastX = lastY = 0;
+        justProcessedArrayEndMarker = false; // Reset flag
+        currentState = new GraphicsState(null); // Initialize ONCE with null bbox and identity CTM
+        // Explicitly ensure CTM is identity BEFORE parsing starts
+        currentState.ctm = new double[]{1, 0, 0, 1, 0, 0}; 
+        debug("Initial CTM reset to identity before parsing."); 
+        double[] foundBbox = null; // Temporary storage for BBox
+        // Initialize calculated bounds tracking
+        overallMinX = Double.MAX_VALUE;
+        overallMinY = Double.MAX_VALUE;
+        overallMaxX = Double.MIN_VALUE;
+        overallMaxY = Double.MIN_VALUE;
+        overallMaxStrokeWidth = 1.0; // Default stroke width
+        boundsInitialized = false;
+        debug("Initial CTM: " + java.util.Arrays.toString(currentState.ctm));
+
+        // --- Single Pass Processing ---
+        try (BufferedReader reader = new BufferedReader(new FileReader(inputFile))) {
+            String line;
+            int lineNumber = 0;
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                String trimmedLine = line.trim();
+
+                // Check for BoundingBox
+                if (trimmedLine.startsWith("%%BoundingBox:")) {
+                    try {
+                        String[] parts = trimmedLine.substring("%%BoundingBox:".length()).trim().split("\\s+");
+                        if (parts.length == 4) {
+                            foundBbox = new double[] {
+                                Double.parseDouble(parts[0]),
+                                Double.parseDouble(parts[1]),
+                                Double.parseDouble(parts[2]),
+                                Double.parseDouble(parts[3])
+                            };
+                             debug("Found/Updated %%BoundingBox: " + java.util.Arrays.toString(foundBbox)); // Log the found values
+                        } else {
+                             debug("Invalid %%BoundingBox format at line " + lineNumber + ": " + trimmedLine);
                         }
+                    } catch (NumberFormatException e) {
+                        debug("Error parsing %%BoundingBox at line " + lineNumber + ": " + trimmedLine);
+                        foundBbox = null; // Reset if error occurs
                     }
-                    
-                    // Process the command after the array
-                    String remainder = line.substring(endBracket + 1).trim();
-                    if (!remainder.isEmpty()) {
-                        processToken(remainder, stack, currentState, currentPath, gsStack, paths, bbox);
-                    }
-                    
+                } else if (trimmedLine.equals("%%EndSetup")) {
+                    // Reset CTM to identity after setup section, before main content
+                    currentState.ctm = new double[]{1, 0, 0, 1, 0, 0};
+                    debug("CTM reset to identity after %%EndSetup.");
+                    processBounds = true; // NEW: Start processing bounds now
+                }
+
+                // Ignore comment lines entirely for token processing
+                if (trimmedLine.startsWith("%")) {
                     continue;
                 }
-            }
-            
-            // Handle procedure definitions
-            if (line.startsWith("/") && line.contains("def")) {
-                System.out.println("DEBUG line " + lineNumber + ": Skipping procedure definition: '" + line + "'");
-                continue;
-            }
-            
-            // Split line into tokens
-            StringTokenizer tokenizer = new StringTokenizer(line, " \t\n\r\f", true);
-            StringBuilder tokenBuilder = new StringBuilder();
-            
-            while (tokenizer.hasMoreTokens()) {
-                String part = tokenizer.nextToken().trim();
-                if (part.isEmpty()) continue;
                 
-                // Accumulate parts of token
-                tokenBuilder.append(part);
-                
-                // Process complete token
-                String token = tokenBuilder.toString();
-                if (!token.isEmpty() && !Character.isWhitespace(token.charAt(0))) {
-                    System.out.println("DEBUG line " + lineNumber + ": Processing token: '" + token + "'");
-                    
-                    processToken(token, stack, currentState, currentPath, gsStack, paths, bbox);
-                    
-                    // Reset for next token
-                    tokenBuilder = new StringBuilder();
-                }
+                // Process all tokens on the line (modifies currentState including CTM)
+                // Split carefully to handle potential operators adjacent to numbers/delimiters
+                 String[] tokens = trimmedLine.split("\\s+|(?<=[()\\[\\]])|(?=[()\\[\\]])"); // Split by whitespace, keep delimiters (), []
+                 for (String token : tokens) {
+                     if (!token.isEmpty()) { // Process non-empty tokens
+                         processToken(token);
+                         // Reset the ']' flag after processing the token *after* ']'
+                         if (!token.equals("]")) {
+                            justProcessedArrayEndMarker = false;
+                         }
+                     }
+                 }
             }
         }
+
+        // --- Finalization ---
+        // Ensure BoundingBox was found
+        if (foundBbox == null) {
+            throw new IOException("Could not find valid %%BoundingBox in EPS file: " + inputFile);
+        }
+
+        // Log the final BBox values right before using them
+        debug("Final BBox values used for SVG: " + java.util.Arrays.toString(foundBbox));
         
-        // Add any remaining path
-        if (!currentPath.isEmpty()) {
-            String pathData = currentPath.buildPathDataString();
-            System.out.println("DEBUG PathBuilder.isEmpty(): pathData.length=" + pathData.length() + 
-                               ", pathStarted=" + currentPath.hasPathStarted() + 
-                               ", returning false");
-            
-            // Handle any remaining fill/stroke attributes
-            String clipAttr = (currentState.clipId != null)
-                ? String.format(Locale.ROOT, " clip-path=\"url(#%s)\"", currentState.clipId)
-                : "";
-            
-            if (currentState.fillColor != null && !currentState.fillColor.equals("none")) {
-                paths.add(String.format(Locale.ROOT,
-                    "<path d=\"%s\" fill=\"%s\" stroke=\"none\"%s/>",
-                    pathData, currentState.fillColor, clipAttr));
-            } else {
-                paths.add(String.format(Locale.ROOT,
-                    "<path d=\"%s\" fill=\"none\" stroke=\"none\" %s/>",
-                    pathData, clipAttr));
+        // --- Calculate final bounds from content ---
+        double[] calculatedBbox;
+        if (boundsInitialized) {
+            double padding = overallMaxStrokeWidth / 2.0;
+            calculatedBbox = new double[] {
+                overallMinX - padding,
+                overallMinY - padding,
+                overallMaxX + padding,
+                overallMaxY + padding
+            };
+            debug("Calculated BBox from content (incl. padding): " + java.util.Arrays.toString(calculatedBbox));
+        } else {
+            debug("Warning: No drawing commands found to calculate bounds, falling back to %%BoundingBox.");
+            // Fallback to parsed BBox if no drawing happened
+            if (foundBbox == null) {
+                 throw new IOException("Could not determine bounding box from either %%BoundingBox or drawing content.");
             }
+            calculatedBbox = foundBbox.clone(); 
         }
-        
-        System.out.println("DEBUG processCommands: Processed " + lineNumber + " lines, generated " + paths.size() + " paths:");
-        for (int i = 0; i < paths.size(); i++) {
-            System.out.println("DEBUG Path " + i + ": " + paths.get(i));
-        }
-        
-        return paths;
+
+        // Set the final bounding box on the state AFTER all processing
+        currentState.bbox = calculatedBbox; // Use calculated (or fallback) bounds
+        debug("Final BBox set. CTM before writing SVG: " + java.util.Arrays.toString(currentState.ctm));
+
+        // --- Write Output ---
+        writeSvgFile(outputFile, calculatedBbox); // Pass calculated (or fallback) bounds to writeSvgFile
     }
 
-    // Process a single token
-    private static void processToken(String token, Stack<String> stack, 
-                                   GraphicsState currentState, PathBuilder currentPath,
-                                   Stack<GraphicsState> gsStack, List<String> paths,
-                                   double[] bbox) {
-        // Check if it's a numeric value
-        if (token.matches("-?\\d+(\\.\\d+)?")) {
-            stack.push(token);
-            System.out.println("DEBUG pushed number to stack: " + token);
-            return;
-        }
-        
-        // Process operation
-        try {
-            System.out.println("DEBUG processing token: " + token);
-            switch (token) {
-                case "gsave":
-                case "gs": // Cairo abbreviation
-                case "q":  // PDF syntax
-                    System.out.println("DEBUG gsave: CTM BEFORE = [" + 
-                        currentState.ctm[0] + " " + currentState.ctm[1] + " " + 
-                        currentState.ctm[2] + " " + currentState.ctm[3] + " " + 
-                        currentState.ctm[4] + " " + currentState.ctm[5] + "]");
-                    gsStack.push(currentState.clone());
-                    System.out.println("DEBUG gsave: Pushed state to stack, stack size = " + gsStack.size());
-                    break;
-                case "grestore":
-                case "gr": // Cairo abbreviation
-                case "Q":  // PDF syntax
-                    if (!gsStack.isEmpty()) {
-                        System.out.println("DEBUG grestore: CTM BEFORE = [" + 
-                            currentState.ctm[0] + " " + currentState.ctm[1] + " " + 
-                            currentState.ctm[2] + " " + currentState.ctm[3] + " " + 
-                            currentState.ctm[4] + " " + currentState.ctm[5] + "]");
-                        
-                        // Save current path data before restoring state
-                        String pathData = currentPath.buildPathDataString();
-                        
-                        // If there's a valid path, save it with current state attributes
-                        if (!currentPath.isEmpty()) {
-                            String clipAttr = (currentState.clipId != null)
-                                ? String.format(Locale.ROOT, " clip-path=\"url(#%s)\"", currentState.clipId)
-                                : "";
-                            
-                            if (currentState.fillColor != null && !currentState.fillColor.equals("none")) {
-                                paths.add(String.format(Locale.ROOT,
-                                    "<path d=\"%s\" fill=\"%s\" stroke=\"none\"%s/>",
-                                    pathData, currentState.fillColor, clipAttr));
-                                System.out.println("DEBUG added fill path: " + pathData);
-                            }
-                        }
-                        
-                        // Now restore the graphics state
-                        currentState = gsStack.pop();
-                        // Create new path with restored state
-                        currentPath = new PathBuilder(currentState);
-                        System.out.println("DEBUG grestore: CTM AFTER = [" + 
-                            currentState.ctm[0] + " " + currentState.ctm[1] + " " + 
-                            currentState.ctm[2] + " " + currentState.ctm[3] + " " + 
-                            currentState.ctm[4] + " " + currentState.ctm[5] + "]");
-                        System.out.println("DEBUG grestore: Popped state from stack, stack size = " + gsStack.size());
-                    } else { System.err.println("Warning: Unmatched grestore."); }
-                    break;
-                case "moveto":
-                case "m": // Scribus/PDF synonym for moveto
-                    if (stack.size() >= 2) {
-                        double y = Double.parseDouble(stack.pop());
-                        double x = Double.parseDouble(stack.pop());
-                        currentPath.moveTo(x, y, currentState, bbox);
-                        System.out.println("DEBUG moveto: " + x + ", " + y);
-                    } else { System.err.println("Warning: Stack underflow for moveto."); }
-                    break;
-                case "rmoveto": // Relative move-to
-                    if (stack.size() >= 2) {
-                        double dy = Double.parseDouble(stack.pop());
-                        double dx = Double.parseDouble(stack.pop());
-                        
-                        // Get last point or default to (0,0)
-                        double[] lastPoint = currentPath.getLastPoint();
-                        double lastX = 0, lastY = 0;
-                        if (lastPoint != null) {
-                            lastX = lastPoint[0];
-                            lastY = lastPoint[1];
-                        }
-                        
-                        // Clear any existing path data
-                        currentPath.clear();
-                        
-                        currentPath.moveTo(lastX + dx, lastY + dy, currentState, bbox);
-                        System.out.println("DEBUG rmoveto: relative " + dx + ", " + dy + " from " + lastX + ", " + lastY);
-                    } else { System.err.println("Warning: Stack underflow for rmoveto."); }
-                    break;
-                case "l":  // Abbreviation for lineto
-                    if (stack.size() >= 2) {
-                        double y = Double.parseDouble(stack.pop());
-                        double x = Double.parseDouble(stack.pop());
-                        currentPath.lineTo(x, y, currentState, bbox);
-                        System.out.println("DEBUG lineto: (" + x + "," + y + ")");
-                    } else { System.err.println("Warning: Stack underflow for lineto."); }
-                    break;
-                case "li":  // Scribus synonym for lineto
-                    if (stack.size() >= 2) {
-                        double y = Double.parseDouble(stack.pop());
-                        double x = Double.parseDouble(stack.pop());
-                        currentPath.lineTo(x, y, currentState, bbox);
-                        System.out.println("DEBUG lineto (li): (" + x + "," + y + ")");
-                    } else { System.err.println("Warning: Stack underflow for li."); }
-                    break;
-                case "rlineto": // Relative line-to
-                    if (stack.size() >= 2) {
-                        double dy = Double.parseDouble(stack.pop());
-                        double dx = Double.parseDouble(stack.pop());
-                        
-                        // Get last point or default to (0,0)
-                        double[] lastPoint = currentPath.getLastPoint();
-                        double lastX = 0, lastY = 0;
-                        if (lastPoint != null) {
-                            lastX = lastPoint[0];
-                            lastY = lastPoint[1];
-                        } else {
-                            System.err.println("Warning: rlineto called without preceding moveto or lineto. Using (0,0) as start.");
-                        }
-                        
-                        currentPath.lineTo(lastX + dx, lastY + dy, currentState, bbox);
-                        System.out.println("DEBUG rlineto: relative " + dx + ", " + dy + " from " + lastX + ", " + lastY);
-                    } else { System.err.println("Warning: Stack underflow for rlineto."); }
-                    break;
-                case "curveto":
-                case "c": // Bezier curve
-                    if (stack.size() >= 6) {
-                        double y3 = Double.parseDouble(stack.pop()); // End point y
-                        double x3 = Double.parseDouble(stack.pop()); // End point x
-                        double y2 = Double.parseDouble(stack.pop()); // Control point 2 y
-                        double x2 = Double.parseDouble(stack.pop()); // Control point 2 x
-                        double y1 = Double.parseDouble(stack.pop()); // Control point 1 y
-                        double x1 = Double.parseDouble(stack.pop()); // Control point 1 x
-                        
-                        currentPath.curveTo(x1, y1, x2, y2, x3, y3, currentState, bbox);
-                        System.out.println("DEBUG curveto: (" + x1 + "," + y1 + "), (" + x2 + "," + y2 + "), (" + x3 + "," + y3 + ")");
-                    } else { System.err.println("Warning: Stack underflow for curveto."); }
-                    break;
-                case "closepath":
-                case "h": // PDF syntax
-                case "cl": // Scribus syntax
-                    currentPath.closePath();
-                    System.out.println("DEBUG closepath");
-                    break;
-                case "concat":
-                case "cm": // Abbreviation
-                    if (stack.size() >= 6) {
-                        double f = Double.parseDouble(stack.pop()); // ty
-                        double e = Double.parseDouble(stack.pop()); // tx
-                        double d = Double.parseDouble(stack.pop()); // d
-                        double c = Double.parseDouble(stack.pop()); // c
-                        double b = Double.parseDouble(stack.pop()); // b
-                        double a = Double.parseDouble(stack.pop()); // a
-                        
-                        System.out.println("DEBUG concat: Input matrix [" + a + " " + b + " " + c + " " + d + " " + e + " " + f + "]");
-                        
-                        // Apply concatenation of CTM (multiply matrices)
-                        double[] newCTM = new double[6];
-                        newCTM[0] = a * currentState.ctm[0] + b * currentState.ctm[2];
-                        newCTM[1] = a * currentState.ctm[1] + b * currentState.ctm[3];
-                        newCTM[2] = c * currentState.ctm[0] + d * currentState.ctm[2];
-                        newCTM[3] = c * currentState.ctm[1] + d * currentState.ctm[3];
-                        newCTM[4] = e * currentState.ctm[0] + f * currentState.ctm[2] + currentState.ctm[4];
-                        newCTM[5] = e * currentState.ctm[1] + f * currentState.ctm[3] + currentState.ctm[5];
-                        
-                        currentState.ctm = newCTM;
-                        System.out.println("DEBUG concat: New CTM = [" + 
-                            currentState.ctm[0] + " " + currentState.ctm[1] + " " + 
-                            currentState.ctm[2] + " " + currentState.ctm[3] + " " + 
-                            currentState.ctm[4] + " " + currentState.ctm[5] + "]");
-                        
-                        // Create a new path with the updated transformation matrix
-                        currentPath = new PathBuilder(currentState);
-                    } else { System.err.println("Warning: Stack underflow for concat/cm. Stack size: " + stack.size()); }
-                    break;
-                case "fill":
-                case "f": // Abbreviation
-                    if (!currentPath.isEmpty()) {
-                        String fillPathData = currentPath.buildPathDataString();
-                        String fillColor = currentState.fillColor != null ? currentState.fillColor : "black";
-                        String fillRuleAttr = currentState.useEvenOddFill ? "fill-rule=\"evenodd\"" : "";
-                        String clipAttr = currentState.clipId != null ? "clip-path=\"url(#" + currentState.clipId + ")\"" : "";
-                        
-                        paths.add(String.format("<path d=\"%s\" fill=\"%s\" %s stroke=\"none\" %s />", 
-                            fillPathData, fillColor, fillRuleAttr, clipAttr));
-                        System.out.println("DEBUG fill: added path with data: " + fillPathData);
-                    } else {
-                        System.out.println("DEBUG fill: Path is empty, not adding");
-                    }
-                    currentPath = new PathBuilder(currentState); // Create a new empty path
-                    break;
-                case "setlinewidth":
-                case "w": // Abbreviation
-                    if (stack.size() >= 1) {
-                        double width = Double.parseDouble(stack.pop());
-                        currentState.lineWidth = width;
-                        System.out.println("DEBUG setlinewidth: " + width);
-                    } else { 
-                        System.err.println("Warning: Stack underflow for setlinewidth."); 
-                    }
-                    break;
-                case "stroke":
-                case "st": // Abbreviation
-                case "S":  // PDF syntax
-                    if (!currentPath.isEmpty()) {
-                        String strokePathData = currentPath.buildPathDataString();
-                        String strokeColor = currentState.strokeColor != null ? currentState.strokeColor : "black";
-                        String strokeWidth = String.format(Locale.ROOT, "%.1f", currentState.lineWidth);
-                        String clipAttr = currentState.clipId != null ? "clip-path=\"url(#" + currentState.clipId + ")\"" : "";
-                        
-                        paths.add(String.format("<path d=\"%s\" fill=\"none\" stroke=\"%s\" stroke-width=\"%s\" %s />", 
-                            strokePathData, strokeColor, strokeWidth, clipAttr));
-                        System.out.println("DEBUG stroke: added path with data: " + strokePathData);
-                    } else {
-                        System.out.println("DEBUG stroke: Path is empty, not adding");
-                    }
-                    currentPath = new PathBuilder(currentState); // Create a new empty path
-                    break;
-                case "setrgbcolor":
-                case "rg": // Abbreviation
-                    if (stack.size() >= 3) {
-                        double b = Double.parseDouble(stack.pop());
-                        double g = Double.parseDouble(stack.pop());
-                        double r = Double.parseDouble(stack.pop());
-                        
-                        currentState.fillColor = String.format(Locale.ROOT, "rgb(%d,%d,%d)", 
-                            (int)(r*255), (int)(g*255), (int)(b*255));
-                        currentState.strokeColor = currentState.fillColor;
-                        System.out.println("DEBUG setrgbcolor: " + currentState.fillColor);
-                    } else { System.err.println("Warning: Stack underflow for setrgbcolor."); }
-                    break;
-                case "setgray":
-                case "g": // PDF syntax
-                    if (stack.size() >= 1) {
-                        double gray = Double.parseDouble(stack.pop());
-                        int grayValue = (int)(gray * 255);
-                        currentState.fillColor = String.format(Locale.ROOT, "rgb(%d,%d,%d)", 
-                            grayValue, grayValue, grayValue);
-                        currentState.strokeColor = currentState.fillColor;
-                        System.out.println("DEBUG setgray: " + currentState.fillColor);
-                    } else { System.err.println("Warning: Stack underflow for setgray."); }
-                    break;
-                case "clip":
-                case "W": // PDF syntax
-                    if (!currentPath.isEmpty()) {
-                        String clipPathData = currentPath.buildPathDataString();
-                        String clipId = "clip" + (++clipIdCounter);
-                        clipPathMap.put(clipId, clipPathData);
-                        currentState.clipId = clipId;
-                        System.out.println("DEBUG clip: Created clip path with ID " + clipId);
-                    }
-                    break;
-                case "eoclip":
-                case "W*": // PDF syntax
-                    if (!currentPath.isEmpty()) {
-                        String clipPathData = currentPath.buildPathDataString();
-                        String clipId = "clip" + (++clipIdCounter);
-                        clipPathMap.put(clipId, clipPathData);
-                        currentState.clipId = clipId;
-                        currentState.useEvenOddFill = true;
-                        System.out.println("DEBUG eoclip: Created clip path with ID " + clipId + " (even-odd)");
-                    }
-                    break;
-                case "re": // rectangle
-                    if (stack.size() >= 4) {
-                        double height = Double.parseDouble(stack.pop());
-                        double width = Double.parseDouble(stack.pop());
-                        double y = Double.parseDouble(stack.pop());
-                        double x = Double.parseDouble(stack.pop());
-                        
-                        currentPath.moveTo(x, y, currentState, bbox);
-                        currentPath.lineTo(x + width, y, currentState, bbox);
-                        currentPath.lineTo(x + width, y + height, currentState, bbox);
-                        currentPath.lineTo(x, y + height, currentState, bbox);
-                        currentPath.closePath();
-                        System.out.println("DEBUG re: Created rectangle at (" + x + "," + y + ") with dimensions " + width + "x" + height);
-                    } else { System.err.println("Warning: Stack underflow for re."); }
-                    break;
-                case "showpage":
-                    // No action needed for SVG output
-                    break;
-                case "newpath":
-                case "n": // Abbreviation
-                    currentPath = new PathBuilder(currentState); // Start a new path
-                    System.out.println("DEBUG newpath: Created new path");
-                    break;
-                case "exch": // Exchange top 2 elements on stack
-                    if (stack.size() >= 2) {
-                        String a = stack.pop();
-                        String b = stack.pop();
-                        stack.push(a);
-                        stack.push(b);
-                        System.out.println("DEBUG exch: Exchanged stack elements");
-                    } else { System.err.println("Warning: Stack underflow for exch."); }
-                    break;
-                // Add support for more operators
-                case "rectclip": // Rectangle clipping - similar to clip but with a rectangle
-                    if (stack.size() >= 4) {
-                        double height = Double.parseDouble(stack.pop());
-                        double width = Double.parseDouble(stack.pop());
-                        double y = Double.parseDouble(stack.pop());
-                        double x = Double.parseDouble(stack.pop());
-                        
-                        // Create a temporary path for the clip
-                        PathBuilder clipPath = new PathBuilder(currentState);
-                        clipPath.moveTo(x, y, currentState, bbox);
-                        clipPath.lineTo(x + width, y, currentState, bbox);
-                        clipPath.lineTo(x + width, y + height, currentState, bbox);
-                        clipPath.lineTo(x, y + height, currentState, bbox);
-                        clipPath.closePath();
-                        
-                        String clipPathData = clipPath.buildPathDataString();
-                        String clipId = "clip" + (++clipIdCounter);
-                        clipPathMap.put(clipId, clipPathData);
-                        currentState.clipId = clipId;
-                        System.out.println("DEBUG rectclip: Created rectangle clip at (" + x + "," + y + ") with dimensions " + width + "x" + height);
-                    } else { System.err.println("Warning: Stack underflow for rectclip."); }
-                    break;
-                default:
-                    // Handle procedures/definitions - for simplicity we ignore them
-                    if (token.startsWith("/") || token.equals("def")) {
-                        System.out.println("DEBUG: Skipping PostScript definition: " + token);
-                    } else {
-                        System.out.println("DEBUG: Unhandled token: " + token);
-                    }
-                    break;
-            }
-        } catch (Exception e) {
-            System.err.println("Warning: Error processing token '" + token + "': " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
+    private void writeSvgFile(String outputFile, double[] bbox) throws IOException {
+        // Log the bbox received by this function
+        debug("writeSvgFile received bbox: " + java.util.Arrays.toString(bbox)); 
 
-    public static void convert(String epsFilePath, String svgFilePath) {
-        try {
-            // Process output directory
-            File outputFile = new File(svgFilePath);
-            File outputDir = outputFile.getParentFile();
-            if (outputDir != null && !outputDir.exists()) {
-                outputDir.mkdirs();
-            }
-            
-            // Reset clip ID counter for this conversion
-            clipIdCounter = 0;
-            clipPathMap.clear(); // Clear any previous clip paths
-            
-            // 1. Read the EPS file and parse the header for BoundingBox
-            File epsFile = new File(epsFilePath);
-            BufferedReader reader = new BufferedReader(new FileReader(epsFile));
-            reader.mark(8192); // Mark the beginning of the file (with a generous buffer)
-            
-            double[] bbox = parseHeader(reader);
-            if (bbox == null) {
-                System.err.println("Error: No BoundingBox found in EPS file. Defaulting to [0 0 612 792]");
-                bbox = new double[] {0, 0, 612, 792};
-            }
-            
-            // If parseHeader() reset the reader, we don't need to reset it here.
-            // Otherwise, reset the reader to start from the beginning again
-            try {
-                reader.reset();
-                System.out.println("DEBUG: Reader reset to beginning of file for command processing");
-            } catch (IOException e) {
-                System.err.println("Warning: Could not reset reader. Reinitializing reader.");
-                reader.close();
-                reader = new BufferedReader(new FileReader(epsFile));
-            }
-            
-            // 2. Read commands after header
-            List<String> paths = processCommands(reader, bbox);
-            reader.close();
-            
-            // 3. Write SVG file
-            writeSvgFile(paths, bbox, svgFilePath);
-            
-        } catch (IOException e) {
-            e.printStackTrace();
+        // Use the passed bbox for viewbox calculations
+        viewBoxMinX = bbox[0];
+        viewBoxMinY = bbox[1];
+        double urx = bbox[2];
+        double ury = bbox[3];
+        viewBoxWidth = urx - viewBoxMinX;
+        viewBoxHeight = ury - viewBoxMinY;
+        // documentHeight might be needed for y-flip logic, but SVG handles coordinate system via viewBox
+        // Ensure width and height are positive
+        if (viewBoxWidth <= 0 || viewBoxHeight <= 0) {
+            System.err.printf("Warning: Calculated SVG dimensions non-positive (w=%.2f, h=%.2f). Adjusting viewBox.%n", viewBoxWidth, viewBoxHeight);
+            viewBoxWidth = (viewBoxWidth <= 0) ? 1.0 : viewBoxWidth;
+            viewBoxHeight = (viewBoxHeight <= 0) ? 1.0 : viewBoxHeight;
+             // Keep original viewBoxMinX/Y for coordinate mapping
         }
-    }
-    
-    private static double[] parseHeader(BufferedReader reader) throws IOException {
-        double[] bbox = null;
-        String line;
-        
-        System.out.println("DEBUG: Parsing header...");
-        
-        // Look for %%BoundingBox or %%HiResBoundingBox in the first 50 lines only
-        // This is to avoid consuming the entire file when parsing header
-        int lineCount = 0;
-        boolean endOfHeaderFound = false;
-        
-        while ((line = reader.readLine()) != null && lineCount < 50 && !endOfHeaderFound) {
-            lineCount++;
-            line = line.trim();
-            System.out.println("DEBUG header line " + lineCount + ": '" + line + "'");
-            
-            // Check for end of header
-            if (line.equals("%%EndComments")) {
-                System.out.println("DEBUG: End of header comments found");
-                endOfHeaderFound = true;
-                break;
-            }
-            
-            // Prefer HiResBoundingBox if available for higher precision
-            if (line.startsWith("%%HiResBoundingBox:")) {
-                String[] parts = line.substring("%%HiResBoundingBox:".length()).trim().split("\\s+");
-                if (parts.length == 4) {
-                    try {
-                        bbox = new double[4];
-                        for (int i = 0; i < 4; i++) {
-                            bbox[i] = Double.parseDouble(parts[i]);
-                        }
-                        System.out.println("Found HiResBoundingBox: [" + bbox[0] + " " + bbox[1] + " " + 
-                                           bbox[2] + " " + bbox[3] + "]");
-                        // Continue to see if we find a %%BoundingBox for completeness,
-                        // but we'll prefer the HiResBoundingBox
-                    } catch (NumberFormatException e) {
-                        System.err.println("Error parsing HiResBoundingBox: " + line);
-                    }
-                }
-            } else if (line.startsWith("%%BoundingBox:")) {
-                String[] parts = line.substring("%%BoundingBox:".length()).trim().split("\\s+");
-                if (parts.length == 4) {
-                    try {
-                        bbox = new double[4];
-                        for (int i = 0; i < 4; i++) {
-                            bbox[i] = Double.parseDouble(parts[i]);
-                        }
-                        System.out.println("Found BoundingBox: [" + bbox[0] + " " + bbox[1] + " " + 
-                                           bbox[2] + " " + bbox[3] + "]");
-                    } catch (NumberFormatException e) {
-                        System.err.println("Error parsing BoundingBox: " + line);
-                    }
-                }
-            }
-        }
-        
-        // If header comments end wasn't found, reset reader to start
-        if (!endOfHeaderFound) {
-            try {
-                reader.reset();
-                System.out.println("DEBUG: Reset reader to beginning of file");
-            } catch (IOException e) {
-                System.err.println("Warning: Could not reset reader. Some content may be skipped.");
-            }
-        }
-        
-        return bbox;
-    }
-    
-    private static void writeSvgFile(List<String> paths, double[] bbox, String svgFilePath) {
-        try {
-            // Create output directory if it doesn't exist
-            File outputDir = new File(svgFilePath).getParentFile();
-            if (outputDir != null && !outputDir.exists()) {
-                outputDir.mkdirs();
-            }
-            
-            FileOutputStream fos = new FileOutputStream(svgFilePath);
-            PrintWriter writer = new PrintWriter(fos);
-            
-            // Calculate viewBox based on bounding box
-            double viewBoxMinX = bbox[0];
-            double viewBoxMinY = bbox[1];
-            double viewBoxWidth = bbox[2] - bbox[0];
-            double viewBoxHeight = bbox[3] - bbox[1];
-            
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile))) {
             // Write SVG header
-            writer.println("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-            writer.println("<svg xmlns=\"http://www.w3.org/2000/svg\" " +
-                        "xmlns:xlink=\"http://www.w3.org/1999/xlink\" " +
-                        String.format(Locale.ROOT, "viewBox=\"%.6f %.6f %.6f %.6f\" ", 
-                                     viewBoxMinX, viewBoxMinY, viewBoxWidth, viewBoxHeight) +
-                        "width=\"" + viewBoxWidth + "pt\" " +
-                        "height=\"" + viewBoxHeight + "pt\">");
-            
-            // Add clip path definitions if needed
-            if (!clipPathMap.isEmpty()) {
-                writer.println("  <defs>");
-                for (Map.Entry<String, String> entry : clipPathMap.entrySet()) {
-                    writer.println("    <clipPath id=\"" + entry.getKey() + "\">");
-                    writer.println("      <path d=\"" + entry.getValue() + "\" />");
-                    writer.println("    </clipPath>");
+            writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\r\n");
+            // Write SVG tag with attributes on a single line
+             writer.write(String.format(Locale.ROOT,
+                 "<svg id=\"svg1\" version=\"1.1\" width=\"%.6f\" height=\"%.6f\" viewBox=\"%.3f %.3f %.3f %.3f\" xmlns=\"http://www.w3.org/2000/svg\">\r\n",
+                 viewBoxWidth, viewBoxHeight, // Use calculated dimensions for width/height
+                  viewBoxMinX, viewBoxMinY, viewBoxWidth, viewBoxHeight)); // Use calculated viewbox
+            // Write the <g> tag WITHOUT the global transform
+            writer.write(" <g id=\"g1\">\r\n");
+
+            // Define SVG transform matrices
+            double[] flipMatrix = {1, 0, 0, -1, 0, 0}; // Y-flip
+            double translateY = viewBoxMinY + ury; // Y-translation (minY + maxY)
+            double[] translateMatrix = {1, 0, 0, 1, 0, translateY};
+
+            // Write paths
+             for (int i = 0; i < paths.size(); i++) {
+                 SvgPath svgPath = paths.get(i);
+                 writer.write(String.format(Locale.ROOT, "   <path id=\"path%d\"\r\n", i + 1));
+                 writer.write(String.format(Locale.ROOT, "     d=\"%s\"\r\n", svgPath.pathData));
+                if (svgPath.style != null && !svgPath.style.isEmpty()) {
+                    writer.write(String.format(Locale.ROOT, "     style=\"%s\"\r\n", svgPath.style));
                 }
-                writer.println("  </defs>");
+                // Calculate the final transform matrix: Translate * Flip * StoredCTM
+                double[] storedCtm = svgPath.ctm; // Get CTM stored with the path
+                
+                // --- Correct Order: (Translate * Flip) * CTM ---
+                // 1. Calculate Translate * Flip (svgBaseTransform = T * F)
+                // T = [1, 0, 0, 1, 0, ty], F = [1, 0, 0, -1, 0, 0]
+                // svgBaseTransform = [1*1+0*0, 1*0+0*(-1), 0*1+1*0, 0*0+1*(-1), 1*0+0*0+0, 1*0+0*0+ty]
+                //                  = [1, 0, 0, -1, 0, ty]
+                double[] svgBaseTransform = {1, 0, 0, -1, 0, translateY};
+
+                // 2. Multiply svgBaseTransform * storedCtm (finalMatrix = svgBaseTransform * CTM)
+                // Let svgBaseTransform = [a,b,c,d,e,f] = [1, 0, 0, -1, 0, ty]
+                // Let storedCtm        = [a',b',c',d',e',f']
+                double ctm_a = storedCtm[0], ctm_b = storedCtm[1], ctm_c = storedCtm[2];
+                double ctm_d = storedCtm[3], ctm_e = storedCtm[4], ctm_f = storedCtm[5];
+
+                double[] finalMatrix = new double[6];
+                // C = A * B --> finalMatrix = svgBaseTransform * storedCtm
+                // a=1, b=0, c=0, d=-1, e=0, f=translateY
+                finalMatrix[0] = 1 * ctm_a + 0 * ctm_b;        // a*a' + c*b'
+                finalMatrix[1] = 0 * ctm_a + (-1) * ctm_b;     // b*a' + d*b'
+                finalMatrix[2] = 1 * ctm_c + 0 * ctm_d;        // a*c' + c*d'
+                finalMatrix[3] = 0 * ctm_c + (-1) * ctm_d;     // b*c' + d*d'
+                finalMatrix[4] = 1 * ctm_e + 0 * ctm_f + 0;  // a*e' + c*f' + e
+                finalMatrix[5] = 0 * ctm_e + (-1) * ctm_f + translateY; // b*e' + d*f' + f
+
+                // Format and write transform matrix if it's not identity
+                boolean isIdentity = isIdentityMatrix(finalMatrix); // Use the helper method
+                debug(String.format(Locale.ROOT,
+                    "Path %d: Final Matrix = %s, isIdentity = %b",
+                    i + 1, java.util.Arrays.toString(finalMatrix), isIdentity)); // Added logging
+
+                if (!isIdentity) { 
+                    writer.write(String.format(Locale.ROOT,
+                        "     transform=\"matrix(%.6f %.6f %.6f %.6f %.6f %.6f)\"\r\n",
+                        finalMatrix[0], finalMatrix[1], finalMatrix[2], finalMatrix[3], finalMatrix[4], finalMatrix[5]));
+                 }
+                writer.write("   />\r\n");
             }
 
-            // Track unique paths to avoid duplicates
-            Set<String> uniquePaths = new HashSet<>();
-            int totalPaths = paths.size();
-            int skippedPaths = 0;
-            int writtenPaths = 0;
-            
-            // Print detailed path information for debugging
-            for (int i = 0; i < paths.size(); i++) {
-                String path = paths.get(i);
-                System.out.println("DEBUG: Path " + i + " (length=" + path.length() + "): " + path);
-                
-                // Extract the path data only (d="...") for comparison
-                int dStart = path.indexOf("d=\"") + 3;
-                int dEnd = path.indexOf("\"", dStart);
-                String pathData = dStart > 2 && dEnd > dStart ? path.substring(dStart, dEnd) : "";
-                
-                // Extract the fill color
-                int fillStart = path.indexOf("fill=\"") + 6;
-                int fillEnd = path.indexOf("\"", fillStart);
-                String fillColor = fillStart > 5 && fillEnd > fillStart ? path.substring(fillStart, fillEnd) : "";
-                
-                // Create a normalized path for deduplication
-                String normalizedPath = pathData + "|" + fillColor;
-                System.out.println("DEBUG: Normalized path " + i + ": " + normalizedPath);
-            }
+            writer.write(" </g>\r\n");
+            writer.write("</svg>\r\n");
+        }
+         debug("SVG file written to: " + outputFile);
+    }
 
-            // Output paths - fix to explicitly check for valid path data and avoid duplicates
-            System.out.println("DEBUG writeSvgFile: Received " + paths.size() + " paths");
-            
-            for (String path : paths) {
-                if (path != null && !path.trim().isEmpty()) {
-                    // Skip empty paths
-                    if (path.contains("d=\"\"") || !path.contains("d=")) {
-                        skippedPaths++;
-                        System.out.println("DEBUG: Skipping empty path: " + path);
-                        continue;
-                    }
-                    
-                    // Extract the path data and fill color for normalized comparison
-                    int dStart = path.indexOf("d=\"") + 3;
-                    int dEnd = path.indexOf("\"", dStart);
-                    String pathData = dStart > 2 && dEnd > dStart ? path.substring(dStart, dEnd) : "";
-                    
-                    int fillStart = path.indexOf("fill=\"") + 6;
-                    int fillEnd = path.indexOf("\"", fillStart);
-                    String fillColor = fillStart > 5 && fillEnd > fillStart ? path.substring(fillStart, fillEnd) : "";
-                    
-                    // Create a normalized path for deduplication
-                    String normalizedPath = pathData + "|" + fillColor;
-                    
-                    // Skip duplicate paths
-                    if (!uniquePaths.add(normalizedPath)) {
-                        skippedPaths++;
-                        System.out.println("DEBUG: Skipping duplicate path: " + normalizedPath);
-                        continue;
-                    }
-                    
-                    writer.println("  " + path);
-                    writtenPaths++;
+    // Helper to update overall bounds based on transformed point
+    private void updateBounds(double x, double y) {
+        // NEW: Only process bounds after %%EndSetup
+        if (!processBounds) {
+            return; // Do not update bounds before main content starts
+        }
+
+        double[] currentTransform = currentState.getCtm(); // Get current CTM
+        if (currentTransform == null) {
+             debug("Warning: updateBounds called with null currentState CTM. Using identity.");
+             currentTransform = new double[]{1, 0, 0, 1, 0, 0}; // Use identity as fallback
+        }
+        // Apply the current transformation matrix
+        double tx = currentTransform[0] * x + currentTransform[2] * y + currentTransform[4];
+        double ty = currentTransform[1] * x + currentTransform[3] * y + currentTransform[5];
+        
+        // Log coordinates before and after transformation
+        debug(String.format(Locale.ROOT, "updateBounds: Input(%.3f, %.3f) -> Transformed(%.3f, %.3f) with CTM %s", 
+                              x, y, tx, ty, java.util.Arrays.toString(currentTransform)));
+
+        if (!boundsInitialized) {
+            overallMinX = tx;
+            overallMinY = ty;
+            overallMaxX = tx;
+            overallMaxY = ty;
+            boundsInitialized = true;
+        } else {
+            overallMinX = Math.min(overallMinX, tx);
+            overallMinY = Math.min(overallMinY, ty);
+            overallMaxX = Math.max(overallMaxX, tx);
+            overallMaxY = Math.max(overallMaxY, ty);
+        }
+         // Log bounds update for debugging
+         // debug(String.format(Locale.ROOT, "Updated bounds with point (%.2f, %.2f) -> (%.2f, %.2f): min(%.2f, %.2f) max(%.2f, %.2f)", 
+         //       x, y, tx, ty, overallMinX, overallMinY, overallMaxX, overallMaxY));
+    }
+
+    private void processToken(String token) {
+        if (token.equals("]")) { // Array end marker
+            debug("Token: ] (Array End Marker)");
+            justProcessedArrayEndMarker = true; // Set flag for potential '[] 0 d'
+            return; // Don't process ']' further
+        }
+
+        // --- Drawing Operators ---
+        if (token.equals("moveto") || token.equals("m")) {
+             if (stack.size() >= 2) {
+                 double y = stack.pop();
+                 double x = stack.pop();
+
+                 // DEBUG: Check CTM right before potential storage
+                 debug("CTM before moveto (m): " + java.util.Arrays.toString(currentState.ctm));
+
+                 // Start a new path if needed
+                 if (!pathStarted || currentPath == null) {
+                     currentPath = new PathBuilder();
+                     pathStarted = true;
+                     this.ctmAtPathStart = currentState.getCtm(); // Capture CTM at moveto
+                 }
+                 currentPath.moveTo(x, y);
+                 updateBounds(x, y); // Update bounds using current CTM
+                 lastX = x;
+                 lastY = y;
+                 debug("moveto: " + x + ", " + y);
+             } else {
+                 debug("moveto: insufficient parameters");
+             }
+        } else if (token.equals("lineto") || token.equals("l")) {
+             if (stack.size() >= 2) {
+                if (pathStarted && currentPath != null) {
+                    double y = stack.pop();
+                    double x = stack.pop();
+                    updateBounds(x, y); // Update bounds using current CTM
+                    currentPath.lineTo(x, y);
+                    lastX = x;
+                    lastY = y;
+                    debug("lineto: (" + x + "," + y + ")");
                 } else {
-                    System.out.println("DEBUG writeSvgFile: Skipping null or empty path");
-                    skippedPaths++;
-                }
+                     debug("lineto: path not started");
+                    // Pop operands anyway to keep stack clean? Or error?
+                    if (stack.size() >= 2) { stack.pop(); stack.pop(); }
+                 }
+             } else {
+                debug("lineto: insufficient parameters");
             }
-            
-            System.out.println("DEBUG: Total paths: " + totalPaths + ", Skipped: " + skippedPaths + ", Written: " + writtenPaths);
-            
-            writer.println("</svg>");
-            writer.flush();
-            writer.close();
-            
-            System.out.println("SVG file created: " + svgFilePath);
-            
-        } catch (IOException e) {
-            System.err.println("Error writing SVG file: " + e.getMessage());
+        } else if (token.equals("curveto") || token.equals("c")) {
+            if (stack.size() >= 6) {
+                if (pathStarted && currentPath != null) {
+                    double y3 = stack.pop();
+                    double x3 = stack.pop();
+                    double y2 = stack.pop();
+                    double x2 = stack.pop();
+                    double y1 = stack.pop();
+                    double x1 = stack.pop();
+                    currentPath.curveTo(x1, y1, x2, y2, x3, y3);
+                    updateBounds(x1, y1);
+                    updateBounds(x2, y2);
+                    updateBounds(x3, y3);
+                    lastX = x3;
+                    lastY = y3;
+                    debug("curveto: (" + x1 + "," + y1 + "), (" + x2 + "," + y2 + "), (" + x3 + "," + y3 + ")");
+                } else {
+                     debug("curveto: path not started");
+                      // Pop operands anyway?
+                     if (stack.size() >= 6) { for(int i=0;i<6;i++) stack.pop(); }
+                }
+            } else {
+                debug("curveto: insufficient parameters");
+            }
+        } else if (token.equals("closepath") || token.equals("h") || token.equals("H")) {
+             if (pathStarted && currentPath != null) {
+                    currentPath.closePath();
+                debug("closepath");
+            } else {
+                debug("closepath: path not started");
+            }
+        } else if (token.equals("fill") || token.equals("f") || token.equals("*f")) {
+            if (pathStarted && currentPath != null && !currentPath.isEmpty()) {
+                String pathData = currentPath.toString();
+                if (!processBounds) { // Check if we are before %%EndSetup
+                    logger.warning("Ignoring path generated before main content (fill): " + pathData);
+                } else if (!pathData.matches("M [\\d\\.-]+,[\\d\\.-]+(?:\\s+Z)?$") && !pathData.isEmpty()) {
+                    // Create style string for fill
+                     String fillRule = "nonzero"; // Assuming default fill rule for now
+                     String style = String.format(Locale.ROOT, "fill:%s; stroke:none; fill-rule:%s;",
+                                                  currentState.fillColor, fillRule);
+                     // Use the CTM captured at the start of the path (moveto)
+                     paths.add(new SvgPath(pathData, style, this.ctmAtPathStart != null ? this.ctmAtPathStart : currentState.getCtm())); // Use ctmAtPathStart
+                     debug("fill: added path with data: " + pathData + " Style: " + style);
+                 } else {
+                      debug("fill: skipped empty or moveto-only path: " + pathData);
+                 }
+                currentPath = null; // Path consumed, needs new moveto
+                pathStarted = false;
+            } else {
+                debug("fill: path not started or empty");
+            }
+         } else if (token.equals("stroke") || token.equals("S") || token.equals("s")) {
+             if (pathStarted && currentPath != null && !currentPath.isEmpty()) {
+                 String pathData = currentPath.toString();
+                  if (!processBounds) { // Check if we are before %%EndSetup
+                      logger.warning("Ignoring path generated before main content (stroke): " + pathData);
+                  } else if (!pathData.matches("M [\\d\\.-]+,[\\d\\.-]+(?:\\s+Z)?$") && !pathData.isEmpty()) {
+                     // Create style string for stroke
+                     // TODO: Handle linecap, linejoin, miterlimit, dasharray from currentState
+                     String style = String.format(Locale.ROOT, "fill:none; stroke:%s; stroke-width:%.3f;",
+                                                  currentState.strokeColor, currentState.lineWidth);
+                     // Use the CTM captured at the start of the path (moveto)
+                      paths.add(new SvgPath(pathData, style, this.ctmAtPathStart != null ? this.ctmAtPathStart : currentState.getCtm())); // Use ctmAtPathStart
+                      debug("stroke: added path with data: " + pathData + " Style: " + style);
+                 } else {
+                     debug("stroke: skipped empty or moveto-only path: " + pathData);
+                 }
+                 currentPath = null; // Path consumed, needs new moveto
+             } else {
+                 debug("stroke: path not started or empty");
+             }
+         } else if (token.matches("-?\\d*\\.?\\d+(E-?\\d+)?")) { // Regex includes scientific notation
+            try {
+                stack.push(Double.parseDouble(token));
+                 debug("pushed number to stack: " + token);
+            } catch (NumberFormatException e) {
+                 debug("Error parsing number token: " + token + " - " + e.getMessage());
+            }
+        } else if (token.equals("concat") || token.equals("cm")) {
+            if (stack.size() >= 6) {
+                try {
+                    // Order: a b c d e f from stack (PostScript)
+                    double f = stack.pop();
+                    double e = stack.pop();
+                    double d = stack.pop();
+                    double c = stack.pop();
+                    double b = stack.pop();
+                    double a = stack.pop();
+                    double[] matrix = {a, b, c, d, e, f};
+                    currentState.concat(matrix);
+                    debug(String.format(Locale.ROOT, "concat/cm: matrix=[" + a + "," + b + "," + c + "," + d + "," + e + "," + f + "]"));
+                    debug(String.format(Locale.ROOT, "CTM after concat/cm: %s", java.util.Arrays.toString(currentState.ctm)));
+                } catch (Exception e) { // Catch potential stack errors if types mismatch
+                    debug("Error processing concat/cm: " + e.getMessage());
+                    // Attempt to recover stack? Or maybe just log and continue?
+                }
+            } else {
+                debug("concat/cm: insufficient parameters on stack (" + stack.size() + ")");
+            }
+        // ... Other token handlers (gsave, grestore, translate, scale, rotate, colors, etc.) ...
+        // --- Make sure these handlers correctly modify 'currentState' ---
+         } else if (token.equals("gsave") || token.equals("q")) {
+            debug("CTM before gsave: " + java.util.Arrays.toString(currentState.ctm));
+            gsStack.push(currentState.clone());
+            debug("gsave: saved graphics state. Stack depth: " + gsStack.size());
+            debug("CTM after gsave (should be same): " + java.util.Arrays.toString(currentState.ctm));
+        } else if (token.equals("grestore") || token.equals("Q")) {
+            debug("CTM before grestore: " + java.util.Arrays.toString(currentState.ctm));
+            if (!gsStack.isEmpty()) {
+                currentState = gsStack.pop();
+                debug("grestore: restored graphics state. Stack depth: " + gsStack.size());
+                debug("CTM after grestore: " + java.util.Arrays.toString(currentState.ctm));
+            } else {
+                debug("grestore: stack empty");
+            }
+        } else if (token.equals("translate")) {
+            if (stack.size() >= 2) {
+                double ty = stack.pop();
+                double tx = stack.pop();
+                debug(String.format(Locale.ROOT, "CTM before translate(%.3f, %.3f): %s", tx, ty, java.util.Arrays.toString(currentState.ctm)));
+                currentState.translate(tx, ty);
+                debug(String.format(Locale.ROOT, "CTM after translate: %s", java.util.Arrays.toString(currentState.ctm)));
+            } else {
+                debug("translate: insufficient parameters");
+            }
+        } else if (token.equals("scale")) {
+            if (stack.size() >= 2) {
+                double sy = stack.pop();
+                double sx = stack.pop();
+                debug(String.format(Locale.ROOT, "CTM before scale(%.3f, %.3f): %s", sx, sy, java.util.Arrays.toString(currentState.ctm)));
+                currentState.scale(sx, sy);
+                 debug(String.format(Locale.ROOT, "CTM after scale: %s", java.util.Arrays.toString(currentState.ctm)));
+           } else {
+                debug("scale: insufficient parameters");
+            }
+        } else if (token.equals("rotate")) {
+            if (stack.size() >= 1) {
+                double angle = stack.pop();
+                debug(String.format(Locale.ROOT, "CTM before rotate(%.3f): %s", angle, java.util.Arrays.toString(currentState.ctm)));
+                currentState.rotate(angle);
+                 debug(String.format(Locale.ROOT, "CTM after rotate: %s", java.util.Arrays.toString(currentState.ctm)));
+           } else {
+                debug("rotate: insufficient parameter");
+            }
+         } else if (token.equals("setlinewidth") || token.equals("w")) {
+            if (stack.size() >= 1) {
+                currentState.lineWidth = stack.pop();
+                overallMaxStrokeWidth = Math.max(overallMaxStrokeWidth, currentState.lineWidth);
+                debug("setlinewidth: " + currentState.lineWidth);
+            } else {
+                 debug("setlinewidth: insufficient parameters");
+            }
+        } else if (token.equals("setlinecap") || token.equals("J")) {
+             if (stack.size() >= 1) {
+                 currentState.lineCap = stack.pop();
+                 debug("setlinecap: " + currentState.lineCap);
+             } else {
+                 debug("setlinecap: insufficient parameters");
+             }
+        } else if (token.equals("setlinejoin") || token.equals("j")) {
+            if (stack.size() >= 1) {
+                currentState.lineJoin = stack.pop();
+                 debug("setlinejoin: " + currentState.lineJoin);
+            } else {
+                 debug("setlinejoin: insufficient parameters");
+            }
+         } else if (token.equals("setmiterlimit") || token.equals("M")) {
+            if (stack.size() >= 1) {
+                currentState.miterLimit = stack.pop();
+                 debug("setmiterlimit: " + currentState.miterLimit);
+            } else {
+                 debug("setmiterlimit: insufficient parameters");
+            }
+        } else if (token.equals("setdash") || token.equals("d")) {
+              // Simplified 'd' handler for '[] 0 d' case primarily
+              if (token.equals("d") && stack.size() >= 1) { // Need at least offset for 'd'
+                   double offset = stack.peek(); // Peek, don't pop yet
+                   // Check the flag set by the ']' token handler
+                   if (justProcessedArrayEndMarker && offset == 0.0) {
+                        // Assume '[] 0 d' sequence detected
+                        stack.pop(); // Pop the offset 0
+                        currentState.dashArray = null; // Solid line
+                        currentState.dashOffset = 0.0;
+                        debug("setdash: Detected [] 0 d sequence, setting solid line.");
+                        justProcessedArrayEndMarker = false; // Consume the flag
+                   } else {
+                        // Actual array + offset handling not implemented
+                        // Pop offset, assume array was consumed/ignored earlier
+                        offset = stack.pop(); // Pop offset confirmed needed
+                        currentState.dashArray = null; // Force solid line as fallback
+                        currentState.dashOffset = offset;
+                        debug("setdash: Array pattern handling not fully implemented. Offset=" + offset + ". Setting solid line.");
+                        justProcessedArrayEndMarker = false; // Consume flag if it was somehow set
+                   }
+              } else if (token.equals("setdash") && stack.size() >= 2) {
+                   // Handle full 'setdash' keyword - more complex stack state needed
+                   debug("setdash: Full keyword handling not implemented.");
+                   // Simplistic fallback: pop offset and assume solid line
+                   double offset = stack.pop();
+                   currentState.dashArray = null;
+                   currentState.dashOffset = offset;
+                   // Need to pop array representation as well - tricky!
+                   // stack.pop(); // Attempt to pop assumed array marker/object?
+                   justProcessedArrayEndMarker = false; // Reset flag
+              } else {
+                  debug("setdash: insufficient parameters or unrecognized state.");
+                  justProcessedArrayEndMarker = false; // Reset flag
+              }
+
+         } else if (token.equals("setcmykcolor") && stack.size() >= 4) {
+             // Check if the *next* token implies fill or stroke context, or handle ambiguity
+             // For now, assume fill based on 'k' command usually being fill
+             double kVal = stack.pop();
+             double yVal = stack.pop();
+             double mVal = stack.pop();
+             double cVal = stack.pop();
+             currentState.fillColor = currentState.cmykColor(cVal, mVal, yVal, kVal);
+             debug("setcmykcolor (assumed fill): " + currentState.fillColor);
+         } else if (token.equals("setgray") && stack.size() >= 1) {
+             // Assume fill based on 'g' usually being fill
+             double grayVal = stack.pop();
+             currentState.fillColor = currentState.grayColor(grayVal);
+             debug("setgray (assumed fill): " + currentState.fillColor);
+
+        } else if (token.equals("k")) { // setcmykcolor (fill) - Explicit
+           if (stack.size() >= 4) {
+                double kVal = stack.pop();
+                double yVal = stack.pop();
+                double mVal = stack.pop();
+                double cVal = stack.pop();
+                currentState.fillColor = currentState.cmykColor(cVal, mVal, yVal, kVal);
+                debug("setcmykcolor fill (k): " + currentState.fillColor);
+            } else {
+                debug("setcmykcolor fill (k): insufficient parameters");
+            }
+        } else if (token.equals("K")) { // setcmykcolor (stroke) - Explicit
+           if (stack.size() >= 4) {
+                double kVal = stack.pop();
+                double yVal = stack.pop();
+                double mVal = stack.pop();
+                double cVal = stack.pop();
+                currentState.strokeColor = currentState.cmykColor(cVal, mVal, yVal, kVal);
+                debug("setcmykcolor stroke (K): " + currentState.strokeColor);
+            } else {
+                debug("setcmykcolor stroke (K): insufficient parameters");
+            }
+        } else if (token.equals("g")) { // setgray (fill) - Explicit
+            if (stack.size() >= 1) {
+                double grayVal = stack.pop();
+                currentState.fillColor = currentState.grayColor(grayVal);
+                debug("setgray fill (g): " + currentState.fillColor);
+            } else {
+                debug("setgray fill (g): insufficient parameters");
+            }
+        } else if (token.equals("G")) { // setgray (stroke) - Explicit
+            if (stack.size() >= 1) {
+                double grayVal = stack.pop();
+                currentState.strokeColor = currentState.grayColor(grayVal);
+                debug("setgray stroke (G): " + currentState.strokeColor);
+            } else {
+                debug("setgray stroke (G): insufficient parameters");
+            }
+        // --- Illustrator specific / potentially problematic ---
+        } else if (token.equals("u") || token.equals("U") || token.equals("*u") || token.equals("*U")) {
+            // Custom Illustrator command - often wraps paths. Might involve gsave/grestore.
+             debug("Unhandled token: " + token + " (Illustrator path grouping?)");
+             // Should we gsave/grestore here? Depends on specific definition.
+        } else if (token.equals("A")) { // Seen in logs, just pops one operand
+             if (!stack.isEmpty()) {
+                 stack.pop();
+                  debug("Handled token: " + token + " (pop)");
+             } else {
+                 debug("Unhandled token: " + token + " (pop - stack empty)");
+             }
+         } else if (token.equals("O")) { // Seen in logs, maybe Illustrator setup
+             // Don't clear stack - let operands be consumed by subsequent commands if needed
+             debug("Unhandled token: O (Likely Illustrator setup)");
+         } else if (token.equals("D") || token.equals("d1") || token.equals("dX")) {
+              // Seems related to path drawing or state setting in logs
+              debug("Unhandled token: " + token + " (Potentially drawing related)");
+              // Often preceded by a number (e.g., 1 D) - maybe pop it?
+              if (!stack.isEmpty() && (token.equals("D") || token.equals("d1"))) {
+                   // Maybe pop one operand based on logs?
+                   // stack.pop();
+                   // debug("Popped one operand based on D/d1 token heuristic");
+              }
+
+        // --- Default / Unhandled ---
+        } else {
+            // Try parsing as number LAST
+            try {
+                stack.push(Double.parseDouble(token));
+                debug("pushed number to stack: " + token);
+            } catch (NumberFormatException e) {
+                // If it's not a common keyword, log as unhandled
+                if (!isCommonPsKeyword(token)) {
+                    debug("Unhandled token: " + token);
+                }
+                 // Otherwise, assume it's a handled keyword (like 'def', 'dict') and ignore
+            }
+            justProcessedArrayEndMarker = false; // Reset flag if token wasn't ']'
         }
     }
 
-    // Normalize path for comparison (combine d attribute and fill/stroke color)
-    private static String normalizePath(String pathElement) {
-        // Extract d attribute
-        Pattern dPattern = Pattern.compile("d=\"([^\"]*)\"");
-        Matcher dMatcher = dPattern.matcher(pathElement);
-        
-        if (!dMatcher.find()) {
-            return "";
+    // Helper to avoid logging every known PS keyword as "unhandled"
+    private boolean isCommonPsKeyword(String token) {
+        switch (token) {
+            case "def": case "dict": case "begin": case "end": case "if": case "ifelse":
+            case "pop": case "exch": case "dup": case "copy": case "index": case "get":
+            case "put": case "true": case "false": case "null": case "type": case "cvx":
+            case "cvi": case "string": case "length": case "array": case "astore": case "aload":
+            case "readonly": case "executeonly": case "noaccess": case "currentdict":
+            case "currentfile": case "setpacking": case "packedarray": case "where":
+            // Add more common keywords as needed
+                return true;
+            default:
+                return false;
         }
-        
-        String d = dMatcher.group(1).trim();
-        
-        // Extract fill color 
-        String fill = "none";
-        Pattern fillPattern = Pattern.compile("fill=\"([^\"]*)\"");
-        Matcher fillMatcher = fillPattern.matcher(pathElement);
-        if (fillMatcher.find()) {
-            fill = fillMatcher.group(1);
-        }
-        
-        // Return d + fill color to ensure identical paths with different colors are preserved
-        return d + "|" + fill;
+    }
+
+    // --- Logging ---
+    private static final Logger logger = Logger.getLogger(EpsToSvgConverter.class.getName());
+    private void debug(String message) {
+        logger.log(Level.FINE, message); // Use FINE level for debug messages
     }
 
     public static void main(String[] args) {
+         // Setup logging level (e.g., FINE for debug, INFO for standard output)
+         Logger rootLogger = Logger.getLogger("");
+         rootLogger.setLevel(Level.FINE); // Set desired level
+         Handler handler = new ConsoleHandler();
+         handler.setLevel(Level.FINE); // Ensure handler also allows the level
+         // Use a simple formatter that includes the level name
+         handler.setFormatter(new SimpleFormatter() {
+            private static final String format = "[%1$tF %1$tT] [%4$-7s] %5$s %n";
+            @Override
+            public synchronized String format(LogRecord lr) {
+                return String.format(format,
+                        new java.util.Date(lr.getMillis()),
+                        lr.getSourceClassName(), // Optional: class name
+                        lr.getLoggerName(),      // Optional: logger name
+                        lr.getLevel().getLocalizedName(),
+                        formatMessage(lr)
+                );
+            }
+         });
+        // Remove existing handlers to avoid duplicate output
+        for (Handler h : rootLogger.getHandlers()) {
+            rootLogger.removeHandler(h);
+        }
+        rootLogger.addHandler(handler);
+
         if (args.length != 2) {
-            System.out.println("Usage: java EpsToSvgConverter <input.eps> <output.svg>");
+            System.err.println("Usage: java EpsToSvgConverter <input.eps> <output.svg>");
             return;
         }
-        
-        convert(args[0], args[1]);
+        EpsToSvgConverter converter = new EpsToSvgConverter();
+        try {
+            converter.convert(args[0], args[1]);
+        } catch (IOException e) {
+            logger.log(Level.SEVERE, "Conversion failed: " + e.getMessage(), e);
+        }
     }
 } 
