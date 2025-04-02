@@ -7,6 +7,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.StringTokenizer;
 import java.util.logging.Level;
+import java.awt.geom.Point2D;
+import java.util.Deque;
+import java.util.ArrayDeque;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * Interprets PostScript commands from an EPS file and calls a GraphicsHandler 
@@ -19,9 +24,12 @@ public class EpsInterpreter {
     // TODO: Add dictionary stack if needed for full PS support
     private GraphicsHandler graphicsHandler;
     private double[] parsedBbox = null;
+    private static final double EPSILON = 1e-6; // Small tolerance for point comparison
 
     public EpsInterpreter(GraphicsHandler handler) {
         this.graphicsHandler = handler;
+        // Define standard operators (add more as needed)
+        // dictionary.put("l", (EpsOperator) this::handleLineTo);
     }
 
     public void processEps(String inputEpsPath) throws IOException {
@@ -76,7 +84,7 @@ public class EpsInterpreter {
                 // Tokenize and process the line
                 StringTokenizer tokenizer = new StringTokenizer(line);
                 while (tokenizer.hasMoreTokens()) {
-                    processToken(tokenizer.nextToken());
+                    processToken(tokenizer.nextToken(), false);
                 }
             } while ((line = reader.readLine()) != null);
 
@@ -110,7 +118,7 @@ public class EpsInterpreter {
          }
      }
 
-    private void processToken(String token) {
+    private void processToken(String token, boolean inHeader) {
         // Simplified: Try parsing as number first
         try {
             double num = Double.parseDouble(token);
@@ -164,11 +172,35 @@ public class EpsInterpreter {
                 break;
             case "l": case "lineto":
                 if (operandStack.size() >= 2) {
-                   Object y = operandStack.pop(); Object x = operandStack.pop();
-                    if (x instanceof Number && y instanceof Number) graphicsHandler.lineTo(((Number)x).doubleValue(), ((Number)y).doubleValue());
-                    else { logger.warning("lineto: non-numeric coords"); operandStack.push(x); operandStack.push(y); }
-                } else logger.warning("lineto: stack underflow");
-               break;
+                    Object yOp = operandStack.pop();
+                    Object xOp = operandStack.pop();
+                    if (xOp instanceof Number && yOp instanceof Number) {
+                        double y = ((Number) yOp).doubleValue();
+                        double x = ((Number) xOp).doubleValue();
+
+                        // ---> Check for superfluous lineto <--- 
+                        Point2D currentPoint = graphicsHandler.getCurrentPoint();
+                        if (currentPoint != null && 
+                            Math.abs(currentPoint.getX() - x) < EPSILON &&
+                            Math.abs(currentPoint.getY() - y) < EPSILON) 
+                        { 
+                            logger.log(Level.FINEST, "Ignoring superfluous lineto to same point ({0}, {1})", new Object[]{x, y});
+                            // Don't call graphicsHandler.lineTo(x, y);
+                        } else {
+                            graphicsHandler.lineTo(x, y);
+                            logger.log(Level.FINEST, "lineto: Raw ({0}, {1})", new Object[]{x, y}); // Keep FINEST level for geometry ops
+                        }
+                        // --- End check ---
+
+                    } else {
+                         logger.warning("lineto: non-numeric coords - pushing back: " + xOp + ", " + yOp);
+                         operandStack.push(xOp); 
+                         operandStack.push(yOp);
+                    }
+                 } else {
+                     logger.warning("lineto: stack underflow");
+                 }
+                 break;
             case "c": case "curveto":
                 if (operandStack.size() >= 6) {
                     Object y3=operandStack.pop(); Object x3=operandStack.pop();
@@ -181,9 +213,37 @@ public class EpsInterpreter {
                break;
             case "h": case "closepath": graphicsHandler.closePath(); break;
             case "n": case "newpath": graphicsHandler.newPath(); break;
-            case "f": case "fill": graphicsHandler.fill(); break;
-            case "F": case "eofill": graphicsHandler.eoFill(); break;
-            case "S": case "stroke": graphicsHandler.stroke(); break;
+            case "f": case "fill":
+                // ---> Check if path is empty before filling <--- 
+                if (graphicsHandler.isCurrentPathEffectivelyEmpty()) {
+                    logger.log(Level.FINEST, "Skipping fill operation for effectively empty path.");
+                    graphicsHandler.newPath(); // Reset path as fill normally would
+                } else {
+                    graphicsHandler.fill();
+                    logger.log(Level.FINEST, "fill");
+                }
+                // --- End check ---
+                break;
+            case "F": case "eofill":
+                // TODO: Implement even-odd fill rule if needed
+                logger.warning("Operator 'eofill' not fully implemented.");
+                // Add similar check for empty path if implementing
+                // if (graphicsHandler.isCurrentPathEffectivelyEmpty()) { ... } else {
+                    graphicsHandler.fill(); // Using non-zero rule for now
+                    logger.log(Level.FINEST, "eofill (using non-zero rule)");
+                // }
+                break;
+            case "S": case "stroke":
+                // ---> Add check for empty path before stroking <--- 
+                if (graphicsHandler.isCurrentPathEffectivelyEmpty()) {
+                    logger.log(Level.FINEST, "Skipping stroke operation for effectively empty path.");
+                    graphicsHandler.newPath(); // Reset path state
+                } else {
+                    graphicsHandler.stroke();
+                    logger.log(Level.FINEST, "stroke");
+                }
+                // --- End check ---
+                break;
             case "q": case "gsave": graphicsHandler.gsave(); break;
             case "Q": case "grestore": graphicsHandler.grestore(); break;
             case "cm": case "concat":

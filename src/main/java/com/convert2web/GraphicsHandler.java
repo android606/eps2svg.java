@@ -2,6 +2,7 @@ package com.convert2web;
 
 import java.awt.Color;
 import java.awt.geom.AffineTransform;
+import java.io.IOException;
 
 /**
  * Interface defining the graphical operations required by the EpsInterpreter.
@@ -45,5 +46,10 @@ public interface GraphicsHandler {
     void setDash(double[] pattern, double offset);
     
     // TODO: Add methods for clip, eoclip, fonts, text, etc. as needed
+
+    java.awt.geom.Point2D getCurrentPoint();
+
+    // ---> Add method to check if the current path is empty/degenerate <--- 
+    boolean isCurrentPathEffectivelyEmpty();
 
 } 
