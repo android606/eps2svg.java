@@ -1,0 +1,51 @@
+    %!PS-Adobe-3.0 EPSF-3.0
+    %%BoundingBox: 0 0 100 100
+
+    /m { moveto } def
+    /l { lineto } def
+    /cl { closepath } def
+    /f { fill } def
+    /rg { setrgbcolor } def
+    /gs { gsave } def
+    /gr { grestore } def
+    /np { newpath } def
+    /cp { clip } def
+    /w { setlinewidth } def
+    /st { stroke } def
+
+    % Define a clipping path (a diamond shape)
+    gs
+      np
+      50 10 m
+      90 50 l
+      50 90 l
+      10 50 l
+      cl
+      cp % Use the path as clip
+      % Anything drawn now is clipped to the diamond
+
+      % Draw a large blue rectangle - should be clipped
+      0 0 1 rg % Blue
+      0 0 m
+      100 0 l
+      100 100 l
+      0 100 l
+      cl
+      f
+    gr % Restore state (removes clipping path)
+
+    % Draw the clipping path outline in black for reference (optional)
+    gs
+      0 0 0 rg % Black
+      1 w
+      np
+      50 10 m
+      90 50 l
+      50 90 l
+      10 50 l
+      cl
+      st
+    gr
+
+    showpage
+    %%EOF

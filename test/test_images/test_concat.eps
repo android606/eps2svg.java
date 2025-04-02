@@ -1,0 +1,37 @@
+    %!PS-Adobe-3.0 EPSF-3.0
+    %%BoundingBox: 0 0 200 100
+
+    /m { moveto } def
+    /l { lineto } def
+    /cl { closepath } def
+    /f { fill } def
+    /rg { setrgbcolor } def
+    /gs { gsave } def
+    /gr { grestore } def
+    /cm { concat } def
+
+    % Draw a small green square at origin
+    gs
+    0 1 0 rg  % Green color
+    10 10 m
+    40 10 l
+    40 40 l
+    10 40 l
+    cl
+    f
+    gr
+
+    % Apply transform (scale x2, translate 100,0)
+    gs
+    [2 0 0 2 100 0] cm % Scale x2, Translate x=100, y=0
+    1 0 0 rg % Red color
+    10 10 m % Draws at (10*2+100, 10*2+0) = (120, 20) in translated coords
+    40 10 l % (40*2+100, 10*2+0) = (180, 20)
+    40 40 l % (180, 80)
+    10 40 l % (120, 80)
+    cl
+    f
+    gr % Restore original transform
+
+    showpage
+    %%EOF
