@@ -30,112 +30,149 @@ import org.apache.batik.anim.dom.SVGDOMImplementation;
 import org.apache.batik.svggen.SVGGraphics2DIOException; 
 
 /**
- * Main class to convert EPS files to SVG using a separated interpreter and handler.
+ * Main class for converting EPS files to SVG
  */
 public class EpsToSvgConverter {
     private static final Logger logger = Logger.getLogger(EpsToSvgConverter.class.getName());
-
-    // --- Constructor ---
+    private boolean forceFallback = false; // Traditional force fallback option (affects binary EPS only)
+    private boolean forceGhostscript = false; // Use GhostScript specifically
+    private boolean forceTiff = false; // Use TIFF preview specifically
+    
+    /**
+     * Constructor initializes logger
+     */
     public EpsToSvgConverter() {
-        setupLogger();
+        logger.info("EPS to SVG Converter initialized");
     }
     
-    // --- Logger Setup ---
-    private void setupLogger() {
-        // Basic console logging setup, consider moving to a static block or config file
-        Logger rootLogger = Logger.getLogger(""); // Get root logger
-        rootLogger.setLevel(Level.FINE); // Set desired logging level
-        // Remove existing handlers to avoid duplicate logging if called multiple times
-        for (java.util.logging.Handler handler : rootLogger.getHandlers()) {
-             rootLogger.removeHandler(handler);
-        }
-        // Add a console handler
-        java.util.logging.ConsoleHandler consoleHandler = new java.util.logging.ConsoleHandler();
-        consoleHandler.setLevel(Level.FINE); // Or Level.INFO for less verbosity
-        consoleHandler.setFormatter(new SimpleFormatter() {
-             private static final String format = "[%1$tF %1$tT] [%2$-7s] %3$s %n";
-            @Override
-            public synchronized String format(java.util.logging.LogRecord lr) {
-                 return String.format(format,
-                         new java.util.Date(lr.getMillis()),
-                         lr.getLevel().getLocalizedName(),
-                         lr.getMessage()
-                 );
-             }
-         });
-         rootLogger.addHandler(consoleHandler);
-
-        // Optional: Add a file handler
-         try {
-             FileHandler fileHandler = new FileHandler("converter.log", false); // Overwrite log on each run
-             fileHandler.setLevel(Level.FINE);
-             fileHandler.setFormatter(new SimpleFormatter()); // Or XMLFormatter
-             rootLogger.addHandler(fileHandler);
-         } catch (IOException e) {
-             logger.log(Level.SEVERE, "Could not initialize log file handler", e);
-         }
-
-        logger.fine("Logger initialized."); // Initial log message
-    }
-
-    // --- Main method - Entry point ---
+    /**
+     * Main method that handles command line arguments - input and output file paths
+     */
     public static void main(String[] args) {
-        // Configure logging (Keep this section)
-        try {
-            InputStream stream = EpsToSvgConverter.class.getClassLoader().getResourceAsStream("logging.properties");
-            if (stream == null) {
-                System.err.println("Failed to find logging.properties. Using default logging settings.");
-            } else {
-                LogManager.getLogManager().readConfiguration(stream);
-            }
-        } catch (IOException e) {
-            System.err.println("Error loading logging configuration: " + e.getMessage());
+        if (args.length < 2) {
+            System.err.println("Usage: java -jar converter.jar <inputFile.eps> <outputFile.svg>");
+            return;
         }
-
-        // --- Restore argument parsing --- 
-        if (args.length < 2) { // Use args again
-            System.err.println("Usage: java EpsToSvgConverter <inputFile.eps> <outputFile.svg>");
-            System.exit(1);
-        }
+        
         String inputFile = args[0];
         String outputFile = args[1];
-
-        EpsToSvgConverter converter = new EpsToSvgConverter();
+        
         try {
+            EpsToSvgConverter converter = new EpsToSvgConverter();
             converter.convert(inputFile, outputFile);
-            logger.info("Conversion process finished for: " + inputFile);
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Conversion failed: " + e.getMessage(), e);
-            System.exit(1);
+            System.out.println("Conversion successful: " + outputFile);
+        } catch (IOException e) {
+            System.err.println("Conversion failed: " + e.getMessage());
+            e.printStackTrace();
         }
     }
-
-    // --- Refactored Conversion Method ---
-    public void convert(String inputEpsPath, String outputSvgPath) throws Exception {
-        logger.info("Starting conversion: " + inputEpsPath + " -> " + outputSvgPath);
-        GraphicsHandler handler = null;
+    
+    /**
+     * Set force fallback flag for binary EPS files
+     * @param force If true, direct parsing is skipped to test fallbacks
+     */
+    public void setForceFallback(boolean force) {
+        this.forceFallback = force;
+        logger.info("Force fallback set to: " + force);
+    }
+    
+    /**
+     * Set force GhostScript flag
+     * @param force If true, will specifically use GhostScript for conversion
+     */
+    public void setForceGhostscript(boolean force) {
+        this.forceGhostscript = force;
+        logger.info("Force GhostScript set to: " + force);
+    }
+    
+    /**
+     * Set force TIFF preview flag
+     * @param force If true, will specifically use TIFF preview for conversion
+     */
+    public void setForceTiff(boolean force) {
+        this.forceTiff = force;
+        logger.info("Force TIFF preview set to: " + force);
+    }
+    
+    /**
+     * Convert an EPS file to SVG
+     * @param inputPath Path to the input EPS file
+     * @param outputPath Path to the output SVG file
+     * @throws IOException If file operations fail
+     */
+    public void convert(String inputPath, String outputPath) throws IOException {
+        logger.info("Starting conversion of " + inputPath + " to " + outputPath);
+        
+        // Validate input file
+        File inputFile = new File(inputPath);
+        if (!inputFile.exists() || !inputFile.isFile()) {
+            throw new IOException("Input file does not exist: " + inputPath);
+        }
+        
+        // Determine EPS file type
+        boolean isBinaryEps = isBinaryEpsFile(inputPath);
+        logger.info("EPS file detected as: " + (isBinaryEps ? "binary" : "standard"));
+        
+        // Create graphics handler for SVG output
+        BatikGraphicsHandler graphicsHandler = new BatikGraphicsHandler();
+        
         try {
-            // 1. Instantiate the Batik Handler
-            handler = new BatikGraphicsHandler();
+            if (isBinaryEps) {
+                // Process Binary EPS
+                BinaryEpsInterpreter interpreter = new BinaryEpsInterpreter(graphicsHandler);
+                
+                // Pass through any force flags
+                if (forceFallback) {
+                    interpreter.setForceFallback(forceFallback);
+                }
+                
+                if (forceGhostscript) {
+                    interpreter.setForceGhostscript(forceGhostscript);
+                }
+                
+                if (forceTiff) {
+                    interpreter.setForceTiff(forceTiff);
+                }
+                
+                // Process the file
+                interpreter.processEps(inputPath);
+            } else {
+                // Process Standard EPS
+                EpsInterpreter interpreter = new EpsInterpreter(graphicsHandler);
+                interpreter.processEps(inputPath);
+            }
             
-            // 2. Instantiate the EPS Interpreter with the handler
-            EpsInterpreter interpreter = new EpsInterpreter(handler);
-            
-            // 3. Process the EPS file (interpreter initializes handler with BBox)
-            interpreter.processEps(inputEpsPath);
-            
-            // 4. Write the output SVG file (Handler takes care of finalizing)
-            handler.writeToFile(outputSvgPath);
-
-            logger.info("Conversion completed successfully: " + outputSvgPath);
-
-        } catch (IOException e) {
-            logger.log(Level.SEVERE, "IOException during conversion: " + e.getMessage(), e);
-            throw e; // Re-throw IOExceptions
+            // Write the SVG to the output file
+            graphicsHandler.writeToFile(outputPath);
+            logger.info("Conversion completed successfully. SVG written to: " + outputPath);
         } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error during conversion process: " + e.getMessage(), e);
-            // Wrap other exceptions
-            throw new RuntimeException("Conversion failed unexpectedly: " + e.getMessage(), e);
+            logger.severe("Conversion failed: " + e.getMessage());
+            e.printStackTrace();
+            throw new IOException("Failed to convert EPS file: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Determine if an EPS file is in binary format
+     * @param filePath Path to the EPS file
+     * @return true if the file is binary EPS, false if standard EPS
+     * @throws IOException If file operations fail
+     */
+    private boolean isBinaryEpsFile(String filePath) throws IOException {
+        try (InputStream is = new BufferedInputStream(new FileInputStream(filePath))) {
+            // Read the first 4 bytes to check for binary EPS magic number
+            byte[] header = new byte[4];
+            int bytesRead = is.read(header, 0, 4);
+            
+            if (bytesRead < 4) {
+                return false;
+            }
+            
+            // Check for binary EPS header magic number (0xC5D0D3C6)
+            return header[0] == (byte)0xC5 && 
+                   header[1] == (byte)0xD0 && 
+                   header[2] == (byte)0xD3 && 
+                   header[3] == (byte)0xC6;
         }
     }
 } 

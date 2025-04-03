@@ -12,6 +12,8 @@ import java.util.Deque;
 import java.util.ArrayDeque;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * Interprets PostScript commands from an EPS file and calls a GraphicsHandler 
@@ -20,16 +22,18 @@ import java.util.HashMap;
 public class EpsInterpreter {
     private static final Logger logger = Logger.getLogger(EpsInterpreter.class.getName());
 
-    private Stack<Object> operandStack = new Stack<>(); // Handles numbers, names, arrays etc.
-    // TODO: Add dictionary stack if needed for full PS support
-    private GraphicsHandler graphicsHandler;
+    private final Stack<Object> operandStack = new Stack<>();
+    private final Stack<Map<String, Object>> dictStack = new Stack<>();
+    private final Stack<List<Object>> procDefStack = new Stack<>();
+    private boolean isBuildingArray = false;
+    private List<Object> currentArray = null;
+    private final GraphicsHandler graphicsHandler;
     private double[] parsedBbox = null;
-    private static final double EPSILON = 1e-6; // Small tolerance for point comparison
+    // private static final double EPSILON = 1e-6; // Tolerance for point comparison (Unused)
 
     public EpsInterpreter(GraphicsHandler handler) {
         this.graphicsHandler = handler;
-        // Define standard operators (add more as needed)
-        // dictionary.put("l", (EpsOperator) this::handleLineTo);
+        dictStack.push(new HashMap<>()); // Initialize user dictionary
     }
 
     public void processEps(String inputEpsPath) throws IOException {
@@ -37,7 +41,7 @@ public class EpsInterpreter {
 
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(inputEpsPath), StandardCharsets.ISO_8859_1))) {
             boolean headerProcessed = false;
-            String line = null; // Initialize line to null
+            String line = null;
 
             // --- Header Processing Phase ---
             while (!headerProcessed && (line = reader.readLine()) != null) {
@@ -46,47 +50,63 @@ public class EpsInterpreter {
 
                 if (line.startsWith("%%BoundingBox:")) {
                     parseBoundingBox(line);
-                    headerProcessed = true; // Found BBox, header done
-                    continue; // Continue to next phase
                 } else if (line.startsWith("%%EndComments")) {
-                     logger.warning("%%BoundingBox not found before %%EndComments.");
-                    headerProcessed = true; // Header done, even without BBox
-                    continue; // Continue to next phase
-                } else if (line.startsWith("%")) {
-                    logger.fine("(Header) Ignoring comment: " + line);
-                    continue;
+                    headerProcessed = true;
+                } else if (line.startsWith("%!PS-Adobe-") || line.startsWith("%%")) {
+                    logger.fine("(Header) Ignoring comment/directive: " + line);
                 } else {
-                     logger.warning("Non-comment line encountered before BBox/EndComments: " + line + ". Treating header as processed.");
-                    headerProcessed = true; 
-                    // Process this first non-comment line as part of the body below
+                    logger.warning("Non-comment line encountered before %%EndComments: " + line + ". Treating header as processed.");
+                    headerProcessed = true;
                 }
-                 if (headerProcessed) break; // Exit header loop if processed (by finding BBox or EndComments)
+                if (headerProcessed && parsedBbox == null) {
+                    logger.warning("%%BoundingBox not found before end of header comments.");
+                }
             }
-            
-             // Initialize the graphics handler *after* parsing BBox
-             graphicsHandler.initialize(parsedBbox);
+
+            // Initialize the graphics handler
+            if (parsedBbox != null && parsedBbox.length == 4) {
+                graphicsHandler.initialize(parsedBbox[0], parsedBbox[1], parsedBbox[2], parsedBbox[3]);
+            } else {
+                logger.log(Level.WARNING, "BoundingBox not found or invalid. Using default initialization (0,0,100,100).");
+                graphicsHandler.initialize(0.0, 0.0, 100.0, 100.0);
+            }
 
             // --- Body Processing Phase ---
-            do { // Use do-while to process the line read before exiting header loop
-                if (line == null) break; // If loop exited due to EOF
-                line = line.trim();
-                 if (line.isEmpty()) continue;
-                 
-                if (line.startsWith("%")) { // Skip comments in body
-                    if (line.startsWith("%%EOF")) {
-                         logger.fine("%%EOF encountered. Finalizing.");
-                         break; // Stop processing
-                    }
-                    logger.fine("(Body) Ignoring comment: " + line);
-                    continue;
+            boolean processCurrentLine = (line != null); 
+            do {
+                if (processCurrentLine) {
+                   processCurrentLine = false;
+                } else {
+                   line = reader.readLine();
                 }
                 
-                // Tokenize and process the line
-                StringTokenizer tokenizer = new StringTokenizer(line);
-                while (tokenizer.hasMoreTokens()) {
-                    processToken(tokenizer.nextToken(), false);
+                if (line == null) break;
+                line = line.trim();
+                if (line.isEmpty()) continue;
+
+                if (line.startsWith("%%EOF")) {
+                    logger.fine("%%EOF encountered. Finalizing.");
+                    break;
                 }
-            } while ((line = reader.readLine()) != null);
+                 if (line.startsWith("%")) {
+                     logger.fine("(Body) Ignoring comment: " + line);
+                    continue;
+                }
+
+                // Add spaces around delimiters BEFORE tokenizing
+                String lineToProcess = line
+                    .replace("[", " [ ")
+                    .replace("]", " ] ")
+                    .replace("{", " { ")
+                    .replace("}", " } ")
+                    .replaceAll("\\s+", " ").trim(); // Collapse multiple spaces
+
+                // Use StringTokenizer again
+                StringTokenizer tokenizer = new StringTokenizer(lineToProcess);
+                while (tokenizer.hasMoreTokens()) {
+                    interpretToken(tokenizer.nextToken());
+                }
+            } while (true);
 
             logger.info("Finished interpreting EPS file.");
 
@@ -94,7 +114,6 @@ public class EpsInterpreter {
             logger.log(Level.SEVERE, "Error reading EPS file: " + e.getMessage(), e);
             throw e;
         } catch (Exception e) {
-            // Catch potential exceptions from processToken or handler calls
             logger.log(Level.SEVERE, "Error during EPS interpretation: " + e.getMessage(), e);
             throw new RuntimeException("Interpretation failed: " + e.getMessage(), e);
         }
@@ -118,202 +137,523 @@ public class EpsInterpreter {
          }
      }
 
-    private void processToken(String token, boolean inHeader) {
-        // Simplified: Try parsing as number first
+    private void interpretToken(String tokenString) {
+        if (tokenString == null || tokenString.isEmpty()) return;
+
+        // Special case for the exact token "{0}" which is found in some EPS files
+        // and is causing issues with our parser
+        if (tokenString.equals("{0}")) {
+            logger.log(Level.FINE, "Found special token {0}, treating as literal", tokenString);
+            operandStack.push(tokenString);
+            return;
+        }
+
+        // Special handling for array construction
+        if (isBuildingArray) {
+            if (tokenString.equals("]")) {
+                handleArrayEnd();
+                return;
+            } else {
+                try {
+                    Double number = Double.parseDouble(tokenString);
+                    currentArray.add(number);
+                    logger.log(Level.FINE, "Added number {0} to array", number);
+                } catch (NumberFormatException e) {
+                    // Not a number, check for name
+                    if (tokenString.startsWith("/")) {
+                        currentArray.add(tokenString);
+                        logger.log(Level.FINE, "Added name {0} to array", tokenString);
+                    } else {
+                        currentArray.add(tokenString); // Add as string/operator
+                        logger.log(Level.FINE, "Added token {0} to array", tokenString);
+                    }
+                } catch (Exception e) {
+                    logger.log(Level.SEVERE, "Error adding to array: " + e.getMessage(), e);
+                    isBuildingArray = false; // Reset state on error
+                }
+                return; // Handled token in array state
+            }
+        }
+
+        // Handle string literals (enclosed in parentheses)
+        if (tokenString.startsWith("(")) {
+            if (tokenString.endsWith(")")) {
+                // A complete string literal in a single token
+                String string = tokenString; // Keep parentheses for now; they'll be removed when the string is used
+                operandStack.push(string);
+                logger.log(Level.FINE, "Pushed string literal: {0}", string);
+            } else {
+                logger.log(Level.WARNING, "Unclosed string literal: {0}", tokenString);
+                // Push it anyway and hope operators handle it correctly
+                operandStack.push(tokenString);
+            }
+            return;
+        }
+
+        // Handle numeric literals
         try {
-            double num = Double.parseDouble(token);
-            operandStack.push(num);
-            logger.fine("Pushed number: " + num);
+            Double number = Double.parseDouble(tokenString);
+            operandStack.push(number);
+            logger.log(Level.FINE, "Pushed number: {0}", number);
             return;
         } catch (NumberFormatException e) {
-            // Not a number, treat as operator/name
-            logger.fine("Processing operator/name: " + token);
+            // Not a number, continue processing
         }
 
-        // Handle operators (simplified example)
-        switch (token) {
-            // --- Stack Operators (Internal) ---
-            case "pop":
-                if (!operandStack.isEmpty()) operandStack.pop();
-                else logger.warning("pop: stack underflow");
-                break;
-            case "dup":
-                 if (!operandStack.isEmpty()) operandStack.push(operandStack.peek());
-                 else logger.warning("dup: stack underflow");
-                break;
-            case "exch":
-                 if (operandStack.size() >= 2) {
-                     Object o1 = operandStack.pop();
-                     Object o2 = operandStack.pop();
-                     operandStack.push(o1);
-                     operandStack.push(o2);
-                 } else logger.warning("exch: stack underflow");
-                break;
-            // TODO: Add more stack ops: clear, count, index, roll, etc.
+        // Handle array start
+        if (tokenString.equals("[")) {
+            handleArrayStart();
+            return;
+        }
 
-            // --- Arithmetic Operators (Internal) ---
-            case "add":
-                if (operandStack.size() >= 2) {
-                    Object o1 = operandStack.pop(); Object o2 = operandStack.pop();
-                    if (o1 instanceof Number && o2 instanceof Number) {
-                        operandStack.push(((Number)o2).doubleValue() + ((Number)o1).doubleValue());
-                    } else { logger.warning("add: non-numeric operands"); operandStack.push(o2); operandStack.push(o1); }
-                } else logger.warning("add: stack underflow");
+        // Handle name literals (PostScript /name objects)
+        if (tokenString.startsWith("/")) {
+            operandStack.push(tokenString);
+            logger.log(Level.FINE, "Pushed name: {0}", tokenString);
+            return;
+        }
+
+        // Handle procedure definition start/end
+        if (tokenString.equals("{")) {
+            handleProcedureStart();
+            return;
+        } else if (tokenString.equals("}")) {
+            handleProcedureEnd();
+            return;
+        }
+        
+        // Handle comments (lines starting with %)
+        if (tokenString.startsWith("%")) {
+            logger.log(Level.FINE, "Ignoring comment: {0}", tokenString);
+            return;
+        }
+
+        // Check if it's a defined name (procedure or value)
+        Object procOrValue = findInDictStack(tokenString);
+        if (procOrValue != null) {
+            if (procOrValue instanceof List) {
+                // It's a procedure, execute its tokens (List of tokens)
+                logger.log(Level.FINE, "Executing procedure: {0}", tokenString);
+                @SuppressWarnings("unchecked")
+                List<Object> procedure = (List<Object>) procOrValue;
+                executeProcedure(procedure);
+            } else {
+                // It's a value, push to operand stack
+                operandStack.push(procOrValue);
+                logger.log(Level.FINE, "Pushed value from dict: {0} = {1}", new Object[]{tokenString, procOrValue});
+            }
+        } else {
+            // Assume it's an operator
+            processOperator(tokenString);
+        }
+    }
+
+    private void executeProcedure(List<Object> procedure) {
+         logger.log(Level.FINEST, "Executing procedure content: {0}", procedure); // Changed level
+         for (Object procToken : procedure) {
+             if (procToken instanceof String) {
+                 interpretToken((String)procToken); 
+             } else if (procToken instanceof Double) {
+                 operandStack.push(procToken);
+                 logger.log(Level.FINEST, "(Proc) Pushed number: {0}", procToken);
+             } else if (procToken instanceof List) {
+                 // Handle nested procedures or arrays
+                 operandStack.push(procToken);
+                 logger.log(Level.FINEST, "(Proc) Pushed nested procedure/array: {0}", procToken);
+             } else {
+                 // For any other type, just push it to the operand stack as is
+                 operandStack.push(procToken);
+                 logger.log(Level.WARNING, "(Proc) Pushing unknown type to stack: {0}", procToken);
+             }
+         }
+    }
+
+    private Object lookup(String name) {
+        for (int i = dictStack.size() - 1; i >= 0; i--) {
+            Map<String, Object> dict = dictStack.get(i);
+            if (dict.containsKey(name)) {
+                return dict.get(name);
+            }
+        }
+        return null;
+    }
+
+    private void processOperator(String operator) {
+        logger.log(Level.FINE, "Processing operator: {0}", operator);
+
+        // Check if we're inside a procedure definition, except for '{' and '}'
+        if (!operator.equals("{") && !operator.equals("}") && procDefStack.size() > 0) {
+            // When inside a procedure definition, accumulate tokens except for def
+            if (!operator.equals("def")) {
+                List<Object> currentProcDef = procDefStack.peek();
+                currentProcDef.add(operator);
+                logger.log(Level.FINE, "Added operator ''{0}'' to procedure definition", operator);
+                return;
+            }
+        }
+
+        switch (operator) {
+            // --- Array Handling ---
+            case "[":
+                handleArrayStart();
                 break;
-            // TODO: Add sub, mul, div, mod, neg, etc.
-
-            // --- Graphics Operators (Delegate to Handler) ---
-            case "m": case "moveto":
-                 if (operandStack.size() >= 2) {
-                    Object y = operandStack.pop(); Object x = operandStack.pop();
-                     if (x instanceof Number && y instanceof Number) graphicsHandler.moveTo(((Number)x).doubleValue(), ((Number)y).doubleValue());
-                     else { logger.warning("moveto: non-numeric coords"); operandStack.push(x); operandStack.push(y); }
-                 } else logger.warning("moveto: stack underflow");
+            case "]":
+                handleArrayEnd();
                 break;
-            case "l": case "lineto":
-                if (operandStack.size() >= 2) {
-                    Object yOp = operandStack.pop();
-                    Object xOp = operandStack.pop();
-                    if (xOp instanceof Number && yOp instanceof Number) {
-                        double y = ((Number) yOp).doubleValue();
-                        double x = ((Number) xOp).doubleValue();
 
-                        // ---> Check for superfluous lineto <--- 
-                        Point2D currentPoint = graphicsHandler.getCurrentPoint();
-                        if (currentPoint != null && 
-                            Math.abs(currentPoint.getX() - x) < EPSILON &&
-                            Math.abs(currentPoint.getY() - y) < EPSILON) 
-                        { 
-                            logger.log(Level.FINEST, "Ignoring superfluous lineto to same point ({0}, {1})", new Object[]{x, y});
-                            // Don't call graphicsHandler.lineTo(x, y);
-                        } else {
-                            graphicsHandler.lineTo(x, y);
-                            logger.log(Level.FINEST, "lineto: Raw ({0}, {1})", new Object[]{x, y}); // Keep FINEST level for geometry ops
-                        }
-                        // --- End check ---
+            // --- Procedure Definition ---
+            case "{":
+                handleProcedureStart();
+                break;
+            case "}":
+                handleProcedureEnd();
+                break;
+            case "def":
+                handleDefinition();
+                break;
 
+            // --- Graphics State Operators ---
+            case "gsave":
+                graphicsHandler.gsave();
+                break;
+            case "grestore":
+                graphicsHandler.grestore();
+                break;
+            case "setlinewidth":
+                if (operandStack.size() >= 1 && operandStack.peek() instanceof Double) {
+                    graphicsHandler.setLineWidth((Double) operandStack.pop());
+                } else logger.log(Level.WARNING, "setlinewidth: stack underflow or non-numeric operand");
+                break;
+            case "setrgbcolor":
+                if (operandStack.size() >= 3) {
+                    Object bObj = operandStack.pop();
+                    Object gObj = operandStack.pop();
+                    Object rObj = operandStack.pop();
+                    if (bObj instanceof Double && gObj instanceof Double && rObj instanceof Double) {
+                        graphicsHandler.setRGBColor((Double) rObj, (Double) gObj, (Double) bObj);
                     } else {
-                         logger.warning("lineto: non-numeric coords - pushing back: " + xOp + ", " + yOp);
-                         operandStack.push(xOp); 
-                         operandStack.push(yOp);
+                        logger.log(Level.WARNING, "setrgbcolor: non-numeric operands.");
+                        // Attempt to restore stack state
+                        operandStack.push(rObj); operandStack.push(gObj); operandStack.push(bObj);
                     }
-                 } else {
-                     logger.warning("lineto: stack underflow");
-                 }
-                 break;
-            case "c": case "curveto":
+                } else logger.log(Level.WARNING, "setrgbcolor: stack underflow");
+                break;
+            case "concat":
+                handleConcatMatrix();
+                break;
+
+            // --- Path Construction Operators ---
+            case "newpath":
+                graphicsHandler.newPath();
+                break;
+            case "moveto":
+                if (operandStack.size() >= 2) {
+                    Object yObj = operandStack.pop();
+                    Object xObj = operandStack.pop();
+                    if (xObj instanceof Double && yObj instanceof Double) {
+                        graphicsHandler.moveTo((Double) xObj, (Double) yObj);
+                    } else {
+                        logger.log(Level.WARNING, "moveto: non-numeric coords.");
+                        // Attempt to restore stack state
+                        operandStack.push(xObj); operandStack.push(yObj);
+                    }
+                } else logger.log(Level.WARNING, "moveto: stack underflow");
+                break;
+            case "lineto":
+                if (operandStack.size() >= 2) {
+                    Object yObj = operandStack.pop();
+                    Object xObj = operandStack.pop();
+                    if (xObj instanceof Double && yObj instanceof Double) {
+                        graphicsHandler.lineTo((Double) xObj, (Double) yObj);
+                    } else {
+                        logger.log(Level.WARNING, "lineto: non-numeric coords.");
+                        // Attempt to restore stack state
+                        operandStack.push(xObj); operandStack.push(yObj);
+                    }
+                } else logger.log(Level.WARNING, "lineto: stack underflow");
+                break;
+            case "curveto":
                 if (operandStack.size() >= 6) {
-                    Object y3=operandStack.pop(); Object x3=operandStack.pop();
-                    Object y2=operandStack.pop(); Object x2=operandStack.pop();
-                    Object y1=operandStack.pop(); Object x1=operandStack.pop();
-                    if (x1 instanceof Number && y1 instanceof Number && x2 instanceof Number && y2 instanceof Number && x3 instanceof Number && y3 instanceof Number) {
-                        graphicsHandler.curveTo(((Number)x1).doubleValue(), ((Number)y1).doubleValue(), ((Number)x2).doubleValue(), ((Number)y2).doubleValue(), ((Number)x3).doubleValue(), ((Number)y3).doubleValue());
-                    } else { /* push back args */ logger.warning("curveto: non-numeric coords"); /* ... */ }
-                } else logger.warning("curveto: stack underflow");
-               break;
-            case "h": case "closepath": graphicsHandler.closePath(); break;
-            case "n": case "newpath": graphicsHandler.newPath(); break;
-            case "f": case "fill":
-                // ---> Check if path is empty before filling <--- 
-                if (graphicsHandler.isCurrentPathEffectivelyEmpty()) {
-                    logger.log(Level.FINEST, "Skipping fill operation for effectively empty path.");
-                    graphicsHandler.newPath(); // Reset path as fill normally would
+                    Object y3 = operandStack.pop(); Object x3 = operandStack.pop();
+                    Object y2 = operandStack.pop(); Object x2 = operandStack.pop();
+                    Object y1 = operandStack.pop(); Object x1 = operandStack.pop();
+                    if (x1 instanceof Double && y1 instanceof Double && x2 instanceof Double && 
+                        y2 instanceof Double && x3 instanceof Double && y3 instanceof Double) {
+                        graphicsHandler.curveTo((Double)x1,(Double)y1,(Double)x2,(Double)y2,(Double)x3,(Double)y3);
+                    } else {
+                        logger.log(Level.WARNING, "curveto: non-numeric coords.");
+                        // Attempt to restore stack state
+                        operandStack.push(x1); operandStack.push(y1); operandStack.push(x2);
+                        operandStack.push(y2); operandStack.push(x3); operandStack.push(y3);
+                    }
+                } else logger.log(Level.WARNING, "curveto: stack underflow");
+                break;
+            case "closepath":
+                graphicsHandler.closePath();
+                break;
+
+            // --- Painting Operators ---
+            case "fill":
+                graphicsHandler.fill();
+                break;
+            case "eofill":
+                graphicsHandler.eoFill();
+                break;
+            case "stroke":
+                graphicsHandler.stroke();
+                break;
+
+            // --- Text Operators ---
+            case "BT":
+                graphicsHandler.beginText();
+                break;
+            case "ET":
+                graphicsHandler.endText();
+                break;
+            case "Tf":
+                if (operandStack.size() >= 2) {
+                    Object sizeObj = operandStack.pop();
+                    Object fontObj = operandStack.pop();
+                    if (sizeObj instanceof Double && fontObj instanceof String) {
+                        double fontSize = (Double) sizeObj;
+                        String fontName = (String) fontObj;
+                        // Remove leading '/' if present
+                        if (fontName.startsWith("/")) {
+                            fontName = fontName.substring(1);
+                        }
+                        graphicsHandler.setFont(fontName, fontSize);
+                    } else {
+                        logger.log(Level.WARNING, "Tf: invalid font or size operands");
+                        // Restore stack
+                        operandStack.push(fontObj);
+                        operandStack.push(sizeObj);
+                    }
                 } else {
-                    graphicsHandler.fill();
-                    logger.log(Level.FINEST, "fill");
+                    logger.log(Level.WARNING, "Tf: stack underflow");
                 }
-                // --- End check ---
                 break;
-            case "F": case "eofill":
-                // TODO: Implement even-odd fill rule if needed
-                logger.warning("Operator 'eofill' not fully implemented.");
-                // Add similar check for empty path if implementing
-                // if (graphicsHandler.isCurrentPathEffectivelyEmpty()) { ... } else {
-                    graphicsHandler.fill(); // Using non-zero rule for now
-                    logger.log(Level.FINEST, "eofill (using non-zero rule)");
-                // }
-                break;
-            case "S": case "stroke":
-                // ---> Add check for empty path before stroking <--- 
-                if (graphicsHandler.isCurrentPathEffectivelyEmpty()) {
-                    logger.log(Level.FINEST, "Skipping stroke operation for effectively empty path.");
-                    graphicsHandler.newPath(); // Reset path state
+            case "Tm":
+                if (operandStack.size() >= 6) {
+                    double[] matrix = new double[6];
+                    for (int i = 5; i >= 0; i--) {
+                        Object obj = operandStack.pop();
+                        if (obj instanceof Double) {
+                            matrix[i] = (Double) obj;
+                        } else {
+                            logger.log(Level.WARNING, "Tm: non-numeric matrix element: {0}", obj);
+                            // Matrix is invalid, don't process
+                            return;
+                        }
+                    }
+                    graphicsHandler.setTextMatrix(matrix);
                 } else {
-                    graphicsHandler.stroke();
-                    logger.log(Level.FINEST, "stroke");
+                    logger.log(Level.WARNING, "Tm: stack underflow");
                 }
-                // --- End check ---
                 break;
-            case "q": case "gsave": graphicsHandler.gsave(); break;
-            case "Q": case "grestore": graphicsHandler.grestore(); break;
-            case "cm": case "concat":
-                 if (operandStack.size() >= 6) {
-                     double[] matrix = new double[6];
-                     boolean ok = true;
-                     // Pop carefully, check types
-                     for (int i = 5; i >= 0; i--) { 
-                         if (operandStack.peek() instanceof Number) matrix[i] = ((Number)operandStack.pop()).doubleValue();
-                         else { ok = false; logger.warning("cm: non-numeric matrix element"); break; } 
-                     }
-                     if(ok) graphicsHandler.concatMatrix(matrix);
-                     // TODO: Push back args if not ok? Requires more stack manipulation.
-                 } else logger.warning("cm: stack underflow");
-                 break;
-            case "w": case "setlinewidth":
-                if (!operandStack.isEmpty() && operandStack.peek() instanceof Number) graphicsHandler.setLineWidth(((Number)operandStack.pop()).doubleValue());
-                else logger.warning("setlinewidth: stack underflow or non-numeric operand");
+            case "Td":
+                if (operandStack.size() >= 2) {
+                    Object yObj = operandStack.pop();
+                    Object xObj = operandStack.pop();
+                    if (xObj instanceof Double && yObj instanceof Double) {
+                        graphicsHandler.moveText((Double) xObj, (Double) yObj);
+                    } else {
+                        logger.log(Level.WARNING, "Td: non-numeric coordinates");
+                        // Restore stack
+                        operandStack.push(xObj);
+                        operandStack.push(yObj);
+                    }
+                } else {
+                    logger.log(Level.WARNING, "Td: stack underflow");
+                }
                 break;
-            case "g": case "setgray":
-                 if (!operandStack.isEmpty() && operandStack.peek() instanceof Number) graphicsHandler.setGrayFill(((Number)operandStack.pop()).doubleValue());
-                 else logger.warning("setgray: stack underflow or non-numeric operand");
+            case "Tj":
+            case "show":
+                if (operandStack.size() >= 1) {
+                    Object textObj = operandStack.pop();
+                    if (textObj instanceof String) {
+                        String text = (String) textObj;
+                        // Remove enclosing parentheses if present
+                        if (text.startsWith("(") && text.endsWith(")")) {
+                            text = text.substring(1, text.length() - 1);
+                        }
+                        graphicsHandler.showText(text);
+                    } else {
+                        logger.log(Level.WARNING, "show/Tj: non-string operand: {0}", textObj);
+                        operandStack.push(textObj);
+                    }
+                } else {
+                    logger.log(Level.WARNING, "show/Tj: stack underflow");
+                }
                 break;
-             case "k": case "setcmykcolor":
-                 if (operandStack.size() >= 4 /* && all are Numbers */ ) { // Simplified check
-                     double k = ((Number)operandStack.pop()).doubleValue();
-                     double y = ((Number)operandStack.pop()).doubleValue();
-                     double m = ((Number)operandStack.pop()).doubleValue();
-                     double c = ((Number)operandStack.pop()).doubleValue();
-                     graphicsHandler.setCMYKColorFill(c, m, y, k);
-                 } else logger.warning("setcmykcolor: stack underflow or non-numeric");
-                break;
-            // TODO: Add cases for setrgbcolor, setlinecap, setlinejoin, setmiterlimit, setdash etc.
 
-            // --- Dictionary/Control Flow (Basic Placeholders) ---
-            case "dict":
-                 if (!operandStack.isEmpty() && operandStack.peek() instanceof Number) {
-                     int size = ((Number)operandStack.pop()).intValue();
-                      logger.warning("'dict' operator size " + size + " - Ignoring (no dict stack)");
-                 } else logger.warning("dict: stack underflow or non-numeric size");
-                 break;
-            case "begin": logger.warning("'begin' operator - Ignoring (no dict stack)"); break;
-            case "end": logger.warning("'end' operator - Ignoring (no dict stack)"); break;
-            case "def": 
-                 if (operandStack.size() >= 2) { operandStack.pop(); operandStack.pop(); /* Ignore key/value */ }
-                 logger.warning("'def' operator - Ignoring (no dict stack)"); 
+            // --- Ignored Operators ---
+            case "showpage": logger.log(Level.FINE, "Ignoring known token: showpage"); break;
+            case "setdash": 
+                handleSetDash();
                 break;
-            case "{": logger.warning("'{' (proc start) - Ignoring"); break; // Need exec handling
-            case "}": logger.warning("'}' (proc end) - Ignoring"); break; // Need exec handling
-            case "if": case "ifelse": logger.warning("'if/ifelse' - Ignoring"); break; // Need proc exec
-            case "exec": logger.warning("'exec' - Ignoring"); break; // Need proc exec
 
-             // --- Known Ignored Tokens ---
-             case "Adobe_packedarray": case "initialize": case "terminate": case "packedarray": 
-             case "setpacking": case "currentpacking": case "Adobe_cshow": case "cshow":
-             case "Adobe_customcolor": case "findcmykcustomcolor": case "setcustomcolor": 
-             case "setoverprint": case "Adobe_IllustratorA_AI3": case "annotatepage":
-             case "showpage": case "A": case "u": case "O": case "*u": case "*U": case "D": case "U":
-                 logger.fine("Ignoring known token: " + token);
-                 break;
-
+            // --- Unhandled Operators ---
             default:
-                // Is it a name (starts with /)?
-                if (token.startsWith("/")) {
-                    operandStack.push(token); // Push name literal onto stack for now
-                    logger.fine("Pushed name: " + token);
-                } else {
-                    logger.warning("Unhandled token/potential error: " + token);
-                    // Maybe try looking up in dictionary if implemented?
-                }
+                logger.log(Level.WARNING, "Unhandled operator: {0}", operator);
+                break;
         }
+    }
+
+    private void handleArrayStart() {
+        logger.log(Level.FINE, "ARRAY START DETECTED: '[' received."); // Changed from SEVERE to FINE
+        isBuildingArray = true;
+        currentArray = new ArrayList<>();
+        logger.log(Level.FINE, "Started array construction.");
+    }
+
+    private void handleArrayEnd() {
+        operandStack.push(currentArray);
+        isBuildingArray = false;
+        Object arrayObj = operandStack.peek();
+        logger.log(Level.FINE, "Ended array construction. Pushed array: {0}", arrayObj); // Fixed logging
+        currentArray = null;
+    }
+
+    private void handleProcedureStart() {
+        procDefStack.push(new ArrayList<>());
+        logger.log(Level.FINE, "Started procedure definition.");
+    }
+
+    private void handleProcedureEnd() {
+        List<Object> procedure = procDefStack.pop();
+        operandStack.push(procedure);
+        logger.log(Level.FINE, "Ended procedure definition. Pushed procedure.");
+    }
+
+    private void handleDefinition() {
+        if (operandStack.size() >= 2) {
+            Object value = operandStack.pop(); 
+            Object keyObj = operandStack.pop();
+            if (keyObj instanceof String && ((String) keyObj).startsWith("/")) {
+                String key = ((String) keyObj).substring(1);
+                if (!dictStack.isEmpty()) {
+                    dictStack.peek().put(key, value);
+                    String valueStr = (value instanceof List) ? "[Procedure]" : String.valueOf(value);
+                    logger.log(Level.FINE, "Defined ''{0}'' = {1}", new Object[]{key, valueStr});
+                } else {
+                    logger.log(Level.WARNING, "'def' operator: No dictionary on stack.");
+                    operandStack.push(keyObj); operandStack.push(value);
+                }
+            } else {
+                logger.log(Level.WARNING, "'def' operator: key ''{0}'' is not a name literal.", keyObj);
+                operandStack.push(keyObj); operandStack.push(value);
+            }
+        } else logger.log(Level.WARNING, "'def' operator: stack underflow");
+    }
+
+    private void handleConcatMatrix() {
+        if (operandStack.peek() instanceof List) {
+            // Handle array format: expects [a b c d e f]
+            List<?> matrix = (List<?>) operandStack.pop();
+            if (matrix.size() != 6) {
+                logger.log(Level.WARNING, "concat: array has wrong size: {0} (expected 6)", matrix.size());
+                return;
+            }
+            
+            double[] affineMatrix = new double[6];
+            boolean validMatrix = true;
+            
+            for (int i = 0; i < 6; i++) {
+                if (matrix.get(i) instanceof Double) {
+                    affineMatrix[i] = (Double)matrix.get(i);
+                } else {
+                    validMatrix = false;
+                    logger.log(Level.WARNING, "concat: matrix element at index {0} is not a number: {1}", 
+                              new Object[]{i, matrix.get(i)});
+                    break;
+                }
+            }
+            
+            if (validMatrix) {
+                graphicsHandler.concatMatrix(affineMatrix);
+                logger.log(Level.FINE, "Applied concatenated matrix: [{0}, {1}, {2}, {3}, {4}, {5}]", 
+                          new Object[]{affineMatrix[0], affineMatrix[1], affineMatrix[2], 
+                                      affineMatrix[3], affineMatrix[4], affineMatrix[5]});
+            }
+        } else if (operandStack.size() >= 6) {
+            // Handle individual elements on stack: expects f e d c b a (PS places first element at top)
+            double[] affineMatrix = new double[6];
+            boolean validMatrix = true;
+            
+            for (int i = 5; i >= 0; i--) {
+                Object element = operandStack.pop();
+                if (element instanceof Double) {
+                    affineMatrix[i] = (Double)element;
+                } else {
+                    validMatrix = false;
+                    logger.log(Level.WARNING, "concat: stack element is not a number: {0}", element);
+                    // Can't really restore stack here, but we'll try to continue
+                    break;
+                }
+            }
+            
+            if (validMatrix) {
+                graphicsHandler.concatMatrix(affineMatrix);
+                logger.log(Level.FINE, "Applied concatenated matrix: [{0}, {1}, {2}, {3}, {4}, {5}]", 
+                          new Object[]{affineMatrix[0], affineMatrix[1], affineMatrix[2], 
+                                      affineMatrix[3], affineMatrix[4], affineMatrix[5]});
+            }
+        } else {
+            logger.log(Level.WARNING, "concat: stack underflow or invalid operand");
+        }
+    }
+
+    private void handleSetDash() {
+        if (operandStack.size() >= 2) {
+            Object offsetObj = operandStack.pop();
+            Object patternObj = operandStack.pop();
+            
+            if (offsetObj instanceof Double && patternObj instanceof List) {
+                double offset = (Double) offsetObj;
+                List<?> patternList = (List<?>) patternObj;
+                double[] pattern = new double[patternList.size()];
+                
+                boolean validPattern = true;
+                for (int i = 0; i < patternList.size(); i++) {
+                    Object item = patternList.get(i);
+                    if (item instanceof Double) {
+                        pattern[i] = (Double) item;
+                    } else {
+                        validPattern = false;
+                        logger.log(Level.WARNING, "setdash: pattern element {0} is not a number: {1}", 
+                                  new Object[]{i, item});
+                        break;
+                    }
+                }
+                
+                if (validPattern) {
+                    graphicsHandler.setDash(pattern, offset);
+                    logger.log(Level.FINE, "Set dash pattern with {0} elements and offset {1}", 
+                              new Object[]{pattern.length, offset});
+                } else {
+                    // Restore stack if pattern was invalid
+                    operandStack.push(patternObj);
+                    operandStack.push(offsetObj);
+                }
+            } else {
+                logger.log(Level.WARNING, "setdash: Invalid operands. Expected array and number, got {0} and {1}", 
+                          new Object[]{patternObj.getClass().getName(), offsetObj.getClass().getName()});
+                // Restore stack
+                operandStack.push(patternObj);
+                operandStack.push(offsetObj);
+            }
+        } else {
+            logger.log(Level.WARNING, "setdash: stack underflow, expected pattern array and offset");
+        }
+    }
+
+    private Object findInDictStack(String name) {
+        for (int i = dictStack.size() - 1; i >= 0; i--) {
+            Map<String, Object> dict = dictStack.get(i);
+            if (dict.containsKey(name)) {
+                return dict.get(name);
+            }
+        }
+        return null;
     }
 } 

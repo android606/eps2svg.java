@@ -11,7 +11,7 @@ import java.io.IOException;
 public interface GraphicsHandler {
 
     // --- Document/Output ---
-    void initialize(double[] bbox); // Initialize with bounding box (if available)
+    void initialize(double llx, double lly, double urx, double ury);
     void writeToFile(String outputPath) throws Exception; // Finalize and write output
 
     // --- Path Construction ---
@@ -30,6 +30,12 @@ public interface GraphicsHandler {
     void gsave(); // Save graphics state
     void grestore(); // Restore graphics state
     void concatMatrix(double[] matrix); // Concatenate CTM
+    
+    // --- Additional Transformation Methods ---
+    void scale(double sx, double sy); // Scale transformation
+    void translate(double tx, double ty); // Translate transformation
+    void saveGraphicsState(); // Save current graphics state
+    void restoreGraphicsState(); // Restore previously saved graphics state
 
     // --- State Attributes ---
     void setGrayFill(double gray); // 0.0 - 1.0
@@ -45,11 +51,19 @@ public interface GraphicsHandler {
     void setMiterLimit(double limit);
     void setDash(double[] pattern, double offset);
     
-    // TODO: Add methods for clip, eoclip, fonts, text, etc. as needed
+    // --- Text Support ---
+    void beginText(); // Handle BT operator
+    void endText();   // Handle ET operator
+    void setFont(String fontName, double fontSize);  // Handle /Font selection and size
+    void showText(String text); // Basic text showing operation
+    void moveText(double x, double y); // Move text position
+    void setTextMatrix(double[] matrix); // Set text transformation matrix
 
     java.awt.geom.Point2D getCurrentPoint();
 
     // ---> Add method to check if the current path is empty/degenerate <--- 
     boolean isCurrentPathEffectivelyEmpty();
 
+    void setRGBColor(double r, double g, double b);
+    void clip(boolean useEvenOddRule);
 } 

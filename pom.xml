@@ -78,7 +78,7 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.2.0</version>
                 <configuration>
-                    <mainClass>com.convert2web.EpsToSvgConverter</mainClass>
+                    <mainClass>com.convert2web.App</mainClass>
                     <arguments>
                         <argument>test/test_images/v1658963.eps</argument>
                         <argument>test/output/v1658963.svg</argument>
@@ -90,7 +90,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>com.convert2web.EpsToSvgConverter</mainClass>
+                            <mainClass>com.convert2web.App</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>

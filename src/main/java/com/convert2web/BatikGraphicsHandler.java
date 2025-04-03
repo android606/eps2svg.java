@@ -77,8 +77,7 @@ public class BatikGraphicsHandler implements GraphicsHandler {
     private Document document;
     private Element root;
     private Path2D.Double currentPath;
-    private Deque<GraphicsState> stateStack = new ArrayDeque<>();
-    private Stack<Path2D.Double> pathStack = new Stack<>();
+    private Stack<Path2D.Double> pathStack = new Stack<>(); // For gsave/grestore path state
     private double[] bbox = null; // Store BBox for setting SVG dimensions
     private final double PADDING = 3.0; // Padding
     private double llx, lly, urx, ury; // Bounding box
@@ -88,6 +87,7 @@ public class BatikGraphicsHandler implements GraphicsHandler {
     // Variables to track path segments for emptiness check
     private int significantSegmentCount = 0;
     private Point2D lastPoint = null;
+    private boolean isPathStarted = false; // Added missing field
 
     // Custom ID generation (keep commented out unless needed)
     // private static class IncrementalIdGenerator implements SVGIDGenerator { ... }
@@ -136,62 +136,105 @@ public class BatikGraphicsHandler implements GraphicsHandler {
 
     // ---> Implement the interface method <---
     @Override
-    public void initialize(double[] bbox) {
-        if (bbox != null && bbox.length == 4) {
-            initializeLogic(bbox[0], bbox[1], bbox[2], bbox[3]);
-        } else {
-            logger.log(Level.SEVERE, "Invalid bounding box array passed to initialize. Using defaults.");
-            initializeLogic(0, 0, 612, 792); // Default values
+    public void initialize(double llx, double lly, double urx, double ury) {
+        DOMImplementation domImpl = GenericDOMImplementation.getDOMImplementation();
+        String svgNS = "http://www.w3.org/2000/svg";
+        this.document = domImpl.createDocument(svgNS, "svg", null);
+        SVGGeneratorContext ctx = SVGGeneratorContext.createDefault(this.document);
+        this.svgGenerator = new SVGGraphics2D(ctx, false);
+
+        // Assign to class fields
+        this.width = urx - llx;
+        this.height = ury - lly;
+
+        // Check for invalid dimensions after assignment
+        if (this.width <= 0 || this.height <= 0) {
+             logger.log(Level.WARNING, "Invalid BoundingBox dimensions: width={0}, height={1}. Using default 100x100.", new Object[]{this.width, this.height});
+             this.width = 100;
+             this.height = 100;
+             llx = 0; lly = 0;
         }
+
+        logger.log(Level.INFO, "Initializing BatikGraphicsHandler with BBox: ll=({0},{1}), ur=({2},{3}), width={4}, height={5}",
+                   new Object[]{llx, lly, urx, ury, this.width, this.height}); // Use class fields in log
+
+        // Declare initialTransform locally
+        AffineTransform initialTransform = new AffineTransform();
+        initialTransform.translate(0, this.height);
+        initialTransform.scale(1, -1);
+        initialTransform.translate(-llx, -lly);
+
+        svgGenerator.setTransform(initialTransform);
+
+        logger.log(Level.INFO, "Initial svgGenerator transform set to: {0}", svgGenerator.getTransform());
+        logger.log(Level.FINE, "BatikGraphicsHandler initialized. Initial transform applied to svgGenerator.");
+
+        this.currentPath = new Path2D.Double(Path2D.WIND_NON_ZERO);
+        this.isPathStarted = false;
+        this.significantSegmentCount = 0;
+        this.lastPoint = null;
+        this.pathStack.clear();
     }
 
     @Override
-    public void writeToFile(String outputPath) throws IOException, TransformerException {
+    public void writeToFile(String outputPath) throws Exception {
         if (svgGenerator == null || document == null) {
-             throw new IllegalStateException("Handler not initialized before writeToFile.");
-         }
-        logger.log(Level.FINE, "Writing SVG to file: {0}", outputPath);
-
-        // ---> Get the root element from the svgGenerator itself <--- 
+            logger.log(Level.SEVERE, "Cannot write SVG: Generator or document is null");
+            return;
+        }
+        
+        // Get the SVG content from the SVGGraphics2D object
+        // This is critical: The svgGenerator has all the drawn content, but we need to transfer it to the document
         Element svgRoot = svgGenerator.getRoot();
+        Document doc = svgGenerator.getDOMFactory();
+        
+        // Obtain the SVG root element from our document for modifications
+        Element root = document.getDocumentElement();
+        
+        // Log information about the SVG content
+        logger.log(Level.FINE, "Writing SVG to file: {0}", outputPath);
+        logger.log(Level.FINE, "Obtained SVG root element ({0}) from document", root.getNodeName());
+        
+        // Copy all child nodes from the svgGenerator root to our document root
+        NodeList children = svgRoot.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            Node importedNode = document.importNode(children.item(i), true);
+            root.appendChild(importedNode);
+        }
+        
+        inspectBatikDom("Before setting root attributes");
+        
+        // Set up SVG dimensions
+        double svgWidthPts = Math.max(1.0, this.width);
+        double svgHeightPts = Math.max(1.0, this.height);
+        
+        // Set view box and dimensions
+        root.setAttributeNS(null, "width", String.format(Locale.US, "%.5f", svgWidthPts));
+        root.setAttributeNS(null, "height", String.format(Locale.US, "%.5f", svgHeightPts));
 
-        if (svgRoot == null) {
-             throw new IOException("SVG root element is null in the document.");
-         }
-        logger.log(Level.FINE, "Obtained SVG root element ({0}) from document", svgRoot.getNodeName());
-        inspectBatikDom("Before write");
-
-        // Set final SVG attributes directly on the root element
-        // Use the calculated width and height
-        // Ensure width/height are non-negative
-        double finalWidth = (this.width >= 0) ? this.width : 1; // Use 1 if zero or negative
-        double finalHeight = (this.height >= 0) ? this.height : 1; // Use 1 if zero or negative
-
-         svgRoot.setAttributeNS(null, "width", String.format(Locale.US, "%.5f", finalWidth));
-         svgRoot.setAttributeNS(null, "height", String.format(Locale.US, "%.5f", finalHeight));
-
-         // ---> Set viewBox to 0 0 width height <---
-         String viewBoxValue = String.format(Locale.US, "0 0 %.5f %.5f", finalWidth, finalHeight);
-         svgRoot.setAttributeNS(null, "viewBox", viewBoxValue);
-         svgRoot.setAttributeNS(null, "preserveAspectRatio", "xMidYMid meet"); // Keep or adjust as needed
-
-        logger.log(Level.INFO, "Set SVG root attributes: width={0}, height={1}, viewBox=[{2}]", new Object[]{finalWidth, finalHeight, viewBoxValue});
-
-        // Add manual IDs (optional, if needed)
-        // Ensure ID generation happens AFTER all graphics are drawn but BEFORE serialization
-        // addManualIds(svgRoot);
-
-        // ---> Use Batik's DOMUtilities for serialization <--- 
-        try (OutputStream os = new FileOutputStream(outputPath);
-             Writer writer = new OutputStreamWriter(os, StandardCharsets.UTF_8)) {
+        // Define viewBox encompassing the entire drawing area
+        String viewBoxValue = String.format(Locale.US, "%.5f %.5f %.5f %.5f", 
+                                          0.0, 0.0, svgWidthPts, svgHeightPts);
+        root.setAttributeNS(null, "viewBox", viewBoxValue);
+        
+        // Log the SVG attributes
+        logger.log(Level.INFO, "Set SVG root attributes: width={0}, height={1}, viewBox=[{2}]", 
+               new Object[]{svgWidthPts, svgHeightPts, viewBoxValue});
+        
+        // Write the SVG dom tree using Batik's DOMUtilities
+        try {
             logger.log(Level.FINE, "Serializing SVG DOM using Batik DOMUtilities...");
-            // DOMUtilities handles writing the node content
-            DOMUtilities.writeNode(svgRoot, writer);
-            writer.flush(); // Ensure all content is written
-            logger.log(Level.FINE, "SVG file written via DOMUtilities to: {0}", outputPath);
-        } catch (IOException e) {
-            logger.log(Level.SEVERE, "IO Error writing SVG file using DOMUtilities: " + outputPath, e);
-            throw e;
+            
+            try (Writer out = new OutputStreamWriter(new FileOutputStream(outputPath), StandardCharsets.UTF_8)) {
+                
+                // In Batik 1.14+ you can use:
+                org.apache.batik.dom.util.DOMUtilities.writeDocument(document, out);
+                
+                logger.log(Level.FINE, "SVG file written via DOMUtilities to: {0}", outputPath);
+            }
+        } catch (IOException ioe) {
+            logger.log(Level.SEVERE, "Error writing SVG file: " + ioe.getMessage(), ioe);
+            throw new SVGGraphics2DIOException("Unable to write SVG to " + outputPath + ": " + ioe.getMessage(), ioe);
         }
     }
 
@@ -208,113 +251,80 @@ public class BatikGraphicsHandler implements GraphicsHandler {
 
     @Override
     public void moveTo(double x, double y) {
-         // ---> Use RAW EPS coordinates <--- 
-         // Point2D svgPt = transformEpsToSvg(x, y); // Removed
-        if (currentPath == null) { // Ensure path exists
-             logger.log(Level.WARNING, "moveTo called before path initialized. Creating new path.");
-             newPath();
-         }
-        currentPath.moveTo(x, y); // Use raw x, y
-        lastPoint = new Point2D.Double(x, y); // Update lastPoint with raw EPS coordinates
-        significantSegmentCount = 0; // Reset segment count on moveto
-        logger.log(Level.FINEST, "moveto: Raw ({0}, {1}) passed directly", new Object[]{x, y});
+        currentPath.moveTo(x, y);
+        lastPoint = new Point2D.Double(x, y);
+        significantSegmentCount = 1; // Reset count on moveto
+        isPathStarted = true;
+        logger.log(Level.FINE, "moveTo: Raw ({0}, {1}), SegmentCount={2}", new Object[]{x, y, significantSegmentCount});
     }
 
     @Override
     public void lineTo(double x, double y) {
-        // ---> Use RAW EPS coordinates <--- 
-        // Point2D svgPt = transformEpsToSvg(x, y); // Removed
-        if (currentPath == null) {
-             logger.log(Level.WARNING, "lineTo called before path initialized. Creating new path and moving to point.");
-             newPath();
-             currentPath.moveTo(x, y); // Use raw x, y
-             significantSegmentCount = 0;
-             lastPoint = new Point2D.Double(x, y); // Store raw EPS
-             return;
-         }
-        if (currentPath.getCurrentPoint() == null) {
-            logger.log(Level.WARNING, "lineTo called without current point, performing moveTo instead.");
-            currentPath.moveTo(x, y); // Use raw x, y
-            significantSegmentCount = 0; // Reset segment count
-        } else {
-            currentPath.lineTo(x, y); // Use raw x, y
-            // Only increment if the line segment has non-zero length (using raw points)
-            if (lastPoint != null && lastPoint.distanceSq(x, y) > 1e-12) {
-                 significantSegmentCount++;
-            }
+        if (lastPoint == null) {
+            logger.log(Level.WARNING, "lineTo called without a current point. Using moveTo instead.");
+            moveTo(x, y);
+            return;
         }
-        lastPoint = new Point2D.Double(x, y); // Update lastPoint with raw EPS coordinates
-        logger.log(Level.FINEST, "lineto: Raw ({0}, {1}) passed directly", new Object[]{x, y});
+        // Basic check for superfluous lineto (optional, consider removing if causing issues)
+        // if (Math.abs(lastPoint.getX() - x) < EPSILON && Math.abs(lastPoint.getY() - y) < EPSILON) {
+        //    logger.log(Level.FINEST, "Ignoring superfluous lineto to same point ({0}, {1})", new Object[]{x, y});
+        //    return;
+        // }
+
+        currentPath.lineTo(x, y);
+        lastPoint = new Point2D.Double(x, y);
+        significantSegmentCount++;
+        isPathStarted = true;
+        logger.log(Level.FINE, "lineTo: Raw ({0}, {1}), SegmentCount={2}", new Object[]{x, y, significantSegmentCount});
     }
 
     @Override
     public void curveTo(double x1, double y1, double x2, double y2, double x3, double y3) {
-        // ---> Use RAW EPS coordinates <--- 
-        // Point2D svgP1 = transformEpsToSvg(x1, y1); // Removed
-        // Point2D svgP2 = transformEpsToSvg(x2, y2); // Removed
-        // Point2D svgP3 = transformEpsToSvg(x3, y3); // Removed
-
-        if (currentPath == null) {
-             logger.log(Level.WARNING, "curveTo called before path initialized. Creating new path and moving to end point.");
-             newPath();
-             currentPath.moveTo(x3, y3); // Move to raw end point
-             significantSegmentCount = 0;
-             lastPoint = new Point2D.Double(x3, y3); // Store raw EPS
-             return;
-        }
-        if (currentPath.getCurrentPoint() == null) {
-             logger.log(Level.WARNING, "curveTo called without current point, performing moveTo instead to end point ({0},{1}).", new Object[]{x3, y3});
-            currentPath.moveTo(x3, y3); // Move to raw end point
-             significantSegmentCount = 0; // Reset segment count
-        } else {
-            currentPath.curveTo(x1, y1, x2, y2, x3, y3); // Use raw coordinates
-             significantSegmentCount++; // Curve always counts as significant
-        }
-        lastPoint = new Point2D.Double(x3, y3); // Update lastPoint with raw EPS coordinates
-        logger.log(Level.FINEST, "curveto: Raw ({0},{1}; {2},{3}; {4},{5}) passed directly",
-                   new Object[]{x1, y1, x2, y2, x3, y3});
+         if (lastPoint == null) {
+             logger.log(Level.WARNING, "curveTo called without a current point. Behavior undefined.");
+             // Maybe treat as moveto to x3, y3? Or ignore?
+             // For now, let it proceed but log warning.
+         }
+        currentPath.curveTo(x1, y1, x2, y2, x3, y3);
+        lastPoint = new Point2D.Double(x3, y3);
+        significantSegmentCount++;
+        isPathStarted = true;
+        logger.log(Level.FINE, "curveTo: Raw (c1={0},{1}, c2={2},{3}, end={4},{5}), SegmentCount={6}", new Object[]{x1, y1, x2, y2, x3, y3, significantSegmentCount});
     }
 
     @Override
     public void closePath() {
-        if (currentPath != null && currentPath.getCurrentPoint() != null) {
+        if (currentPath != null && lastPoint != null && isPathStarted) {
             currentPath.closePath();
-            significantSegmentCount++; // Closing counts as significant
-            logger.log(Level.FINEST, "closepath");
+            significantSegmentCount++; // Increment for the closepath segment itself
+            // Find the starting point of the subpath that was just closed
+            PathIterator pi = currentPath.getPathIterator(null);
+            double[] coords = new double[6];
+            Point2D.Double subpathStart = null;
+            while (!pi.isDone()) {
+                int segType = pi.currentSegment(coords);
+                if (segType == PathIterator.SEG_MOVETO) {
+                    subpathStart = new Point2D.Double(coords[0], coords[1]);
+                }
+                pi.next();
+            }
+            lastPoint = subpathStart; // Current point is now the subpath start
+            logger.log(Level.FINE, "closePath executed. SegmentCount={0}, LastPoint set to {1}", new Object[]{significantSegmentCount, lastPoint});
         } else {
-             logger.log(Level.WARNING, "closePath called with no current point or null path.");
+             logger.log(Level.WARNING, "closePath called with no current point or null/empty path.");
         }
     }
 
     @Override
     public void fill() {
-        // --- Remove DIAGNOSTIC rectangle drawing ---
-        /*
-        try {
-            java.awt.geom.Rectangle2D.Double testRect = new java.awt.geom.Rectangle2D.Double(10, 10, 50, 50);
-            Paint originalPaint = svgGenerator.getPaint();
-            svgGenerator.setPaint(Color.RED);
-            svgGenerator.fill(testRect);
-            svgGenerator.setPaint(originalPaint);
-            logger.log(Level.FINE, "fill: Drew diagnostic red rectangle at (10,10) w=50, h=50");
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error during diagnostic fill operation", e);
-        }
-        */
-        // --- Original fill logic ---
-        try {
-            if (currentPath != null && !currentPath.getPathIterator(null).isDone()) {
-                logger.log(Level.FINE, "fill: path bounds={0}, CTM={1}", new Object[]{currentPath.getBounds2D(), svgGenerator.getTransform()});
-                svgGenerator.fill(currentPath);
-            } else {
-                 logger.log(Level.WARNING, "fill: currentPath was empty or null when attempting to fill it.");
-            }
-            
-            inspectBatikDom("[Immediately after filling CURRENT PATH]"); // Update context
-            newPath();
-            logger.log(Level.FINE, "fill: path reset");
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error during fill operation", e);
+        if (currentPath != null && significantSegmentCount > 0) {
+             logger.log(Level.FINE, "fill: path bounds={0}, CTM={1}", new Object[]{currentPath.getBounds2D(), svgGenerator.getTransform()});
+             svgGenerator.fill(currentPath);
+             inspectBatikDom("After fill");
+             newPath();
+             logger.log(Level.FINE, "fill: path reset after drawing");
+        } else {
+             logger.log(Level.FINE, "fill called with empty path. No action taken.");
         }
     }
 
@@ -334,55 +344,52 @@ public class BatikGraphicsHandler implements GraphicsHandler {
 
     @Override
     public void stroke() {
-        if (currentPath == null || currentPath.getPathIterator(null).isDone()) {
-            logger.log(Level.WARNING, "stroke: Attempted to stroke an empty or null path.");
-            return;
-        }
-        try {
-             // Rely on the CTM set on svgGenerator
-            logger.log(Level.FINE, "stroke: path bounds={0}, CTM={1}", new Object[]{currentPath.getBounds2D(), svgGenerator.getTransform()});
-            svgGenerator.draw(currentPath); // Pass original path
-            inspectBatikDom("[Immediately after stroking CURRENT PATH]");
-            newPath(); // Correct casing
-            logger.log(Level.FINE, "stroke: path reset");
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error during stroke operation", e);
+        if (currentPath != null && significantSegmentCount > 0) {
+             logger.log(Level.FINE, "stroke: path bounds={0}, CTM={1}", new Object[]{currentPath.getBounds2D(), svgGenerator.getTransform()});
+             svgGenerator.draw(currentPath);
+             inspectBatikDom("After stroke");
+             newPath();
+             logger.log(Level.FINE, "stroke: path reset after drawing");
+        } else {
+             logger.log(Level.FINE, "stroke called with empty path. No action taken.");
         }
     }
 
     @Override
     public void gsave() {
-        if (svgGenerator == null) return;
-        svgGenerator.create(); // Batik's way of saving graphics state
-
-        // ---> Save current path state (ensure it's Path2D.Double) <---
-        if (currentPath != null) {
-            // Explicit cast needed if currentPath were just Path2D, but it's Path2D.Double
-            pathStack.push((Path2D.Double) currentPath.clone());
-            logger.log(Level.FINEST, "gsave: Pushed path state. Path stack depth: {0}", pathStack.size());
-        } else {
-            pathStack.push(new Path2D.Double()); // Push an empty path
-            logger.log(Level.WARNING, "gsave: currentPath was null, pushed new empty path.");
-        }
+        logger.log(Level.FINE, "gsave called. Current CTM: {0}", svgGenerator.getTransform());
+        // Create a new SVGGraphics2D instance that inherits the current state
+        SVGGraphics2D newState = (SVGGraphics2D) svgGenerator.create();
+        pathStack.push(currentPath);
+        logger.log(Level.FINE, "gsave: Pushed path state. Stack sizes: Path={0}. Path bounds: {1}", 
+                  new Object[]{pathStack.size(), currentPath.getBounds2D()});
+        svgGenerator = newState; // Work with the new state
     }
 
     @Override
     public void grestore() {
         if (svgGenerator == null) return;
+        logger.log(Level.FINE, "grestore called. Current CTM: {0}", svgGenerator.getTransform());
 
-        // ---> Restore current path state (pop returns Path2D.Double) <---
+        // Restore path state FIRST
         if (!pathStack.isEmpty()) {
-            currentPath = pathStack.pop(); // Assign Path2D.Double back to currentPath
-             significantSegmentCount = countSignificantSegments(currentPath); // Recalculate segment count
-             lastPoint = currentPath.getCurrentPoint(); // Reset last point
-             logger.log(Level.FINEST, "grestore: Popped path state. Path stack depth: {0}", pathStack.size());
+            currentPath = pathStack.pop();
+            significantSegmentCount = countSignificantSegments(currentPath);
+            lastPoint = (currentPath != null) ? currentPath.getCurrentPoint() : null;
+            isPathStarted = (significantSegmentCount > 0);
+            logger.log(Level.FINE, "grestore: Popped path state. Path stack depth: {0}. New currentPath bounds: {1}, lastPoint: {2}", 
+                      new Object[]{pathStack.size(), currentPath != null ? currentPath.getBounds2D() : "null", lastPoint});
         } else {
-            logger.log(Level.SEVERE, "grestore: Attempted to pop from empty path stack!");
-            newPath(); // Reset to a known state
+            logger.log(Level.WARNING, "grestore: Path stack empty on grestore.");
+            currentPath = new Path2D.Double(Path2D.WIND_NON_ZERO);
+            significantSegmentCount = 0;
+            lastPoint = null;
+            isPathStarted = false;
         }
 
-        svgGenerator.dispose(); // Batik's way of restoring graphics state
-        logger.log(Level.FINEST, "grestore");
+        // Restore Batik's state by disposing the current context
+        svgGenerator.dispose();
+        logger.log(Level.FINE, "grestore: Disposed current SVG state.");
     }
 
     // Helper method to count segments (needed for restore)
@@ -418,15 +425,54 @@ public class BatikGraphicsHandler implements GraphicsHandler {
 
         // Create an AffineTransform from the EPS matrix elements.
         // EPS matrix [a b c d e f] corresponds to AffineTransform(a, b, c, d, e, f)
-        // Since our drawing coordinates are already transformed to the SVG system,
-        // we apply this matrix directly to the svgGenerator CTM.
+        // PostScript matrices are stored in column-major order
+        
+        // Log original matrix values
+        logger.log(Level.FINE, "concatMatrix: Original EPS Matrix=[{0}, {1}, {2}, {3}, {4}, {5}]",
+                  new Object[]{a, b, c, d, e, f});
+        
+        // Calculate scale factors and rotation/skew components
+        double scaleX = Math.sqrt(a*a + b*b);
+        double scaleY = Math.sqrt(c*c + d*d);
+        double maxScale = Math.max(scaleX, scaleY);
+        
+        // Check for extreme scaling or skewing effects
+        if (maxScale > 5.0 || maxScale < 0.01 || Double.isNaN(maxScale)) {
+            // Normalize to prevent excessive scaling
+            double scaleFactor = 1.0;
+            if (maxScale > 5.0) {
+                scaleFactor = 1.0 / maxScale;
+                logger.log(Level.WARNING, "Normalizing excessive scale factor: {0} -> 1.0", maxScale);
+            } else if (maxScale < 0.01 && maxScale > 0.0) {
+                scaleFactor = 0.1 / maxScale;
+                logger.log(Level.WARNING, "Normalizing tiny scale factor: {0} -> 0.1", maxScale);
+            } else if (Double.isNaN(maxScale)) {
+                // Handle invalid matrix by using identity
+                a = 1.0; b = 0.0; c = 0.0; d = 1.0;
+                logger.log(Level.WARNING, "Invalid matrix with NaN values normalized to identity");
+            } else {
+                // Apply correction based on heuristics
+                a *= scaleFactor;
+                b *= scaleFactor;
+                c *= scaleFactor;
+                d *= scaleFactor;
+                // Do not scale translation components
+            }
+        }
+        
+        // Check for extreme skew
+        double skewFactor = Math.abs(a*d - b*c); // Determinant
+        if (skewFactor > 10.0 || skewFactor < 0.1) {
+            logger.log(Level.WARNING, "Matrix has significant skew (determinant: {0}), may cause display issues", skewFactor);
+        }
+        
+        // Create and apply the transform
         AffineTransform epsMatrix = new AffineTransform(a, b, c, d, e, f);
+        svgGenerator.transform(epsMatrix); // Concatenate with current transform
 
-        // Concatenate this matrix with the svgGenerator's current transform.
-        svgGenerator.transform(epsMatrix); // Use transform() which concatenates
-
+        // Log the final transformation and new CTM state
         logger.log(Level.FINE, "concatMatrix: Applied EPS Matrix=[{0}, {1}, {2}, {3}, {4}, {5}]. New SVG CTM: {6}",
-                   new Object[]{a, b, c, d, e, f, svgGenerator.getTransform()});
+                   new Object[]{a, b, c, d, e, f, formatAffineTransform(svgGenerator.getTransform())});
     }
 
     // ---> Implement the interface method <---
@@ -787,5 +833,174 @@ public class BatikGraphicsHandler implements GraphicsHandler {
                 addIdsToElementAndChildren((Element) node);
             }
         }
+    }
+
+    @Override
+    public void setRGBColor(double r, double g, double b) {
+        // Clamp values to [0, 1] and convert to [0, 255]
+        int red = (int) (Math.max(0, Math.min(1, r)) * 255);
+        int green = (int) (Math.max(0, Math.min(1, g)) * 255);
+        int blue = (int) (Math.max(0, Math.min(1, b)) * 255);
+        Color color = new Color(red, green, blue);
+        // Setting color affects both fill and stroke in subsequent operations in AWT/Batik
+        svgGenerator.setColor(color); 
+        // svgGenerator.setPaint(color); // setColor should handle this
+        logger.log(Level.FINE, "setRGBColor: r={0}, g={1}, b={2} -> AWT Color: {3}", new Object[]{r, g, b, color});
+    }
+
+    @Override
+    public void clip(boolean useEvenOddRule) {
+        if (currentPath != null && significantSegmentCount > 0) {
+            logger.log(Level.FINE, "clip: Applying current path as clip. Rule: {0}. Path bounds: {1}",
+                       new Object[]{useEvenOddRule ? "evenodd" : "nonzero", currentPath.getBounds2D()});
+
+            // Create a copy of the path with the specified winding rule
+            int rule = useEvenOddRule ? Path2D.WIND_EVEN_ODD : Path2D.WIND_NON_ZERO;
+            Path2D.Double clipPath = new Path2D.Double(rule);
+            clipPath.append(currentPath, false);
+
+            svgGenerator.clip(clipPath);
+            inspectBatikDom("After clip");
+
+            // PostScript clip consumes the path for clipping.
+            newPath(); // Reset path after clipping
+            logger.log(Level.FINE, "clip: Path reset after applying as clip.");
+        } else {
+             logger.log(Level.WARNING, "clip: Attempted to clip with empty path.");
+        }
+    }
+
+    // --- Text Support Implementation ---
+    
+    private Font currentFont = null;
+    private AffineTransform textMatrix = new AffineTransform();
+    private boolean inTextMode = false;
+    private Point2D textPosition = new Point2D.Double(0, 0);
+    
+    @Override
+    public void beginText() {
+        logger.log(Level.FINE, "beginText: Starting text block");
+        inTextMode = true;
+        textMatrix = new AffineTransform();
+        textPosition = new Point2D.Double(0, 0);
+    }
+    
+    @Override
+    public void endText() {
+        logger.log(Level.FINE, "endText: Ending text block");
+        inTextMode = false;
+    }
+    
+    @Override
+    public void setFont(String fontName, double fontSize) {
+        logger.log(Level.FINE, "setFont: name={0}, size={1}", new Object[]{fontName, fontSize});
+        
+        // Map PostScript font names to Java font names
+        String javaFontName = "SansSerif"; // Default
+        if (fontName.contains("Helvetica")) {
+            javaFontName = "SansSerif";
+        } else if (fontName.contains("Times")) {
+            javaFontName = "Serif";
+        } else if (fontName.contains("Courier")) {
+            javaFontName = "Monospaced";
+        }
+        
+        int style = Font.PLAIN;
+        if (fontName.contains("Bold") && fontName.contains("Italic")) {
+            style = Font.BOLD | Font.ITALIC;
+        } else if (fontName.contains("Bold")) {
+            style = Font.BOLD;
+        } else if (fontName.contains("Italic") || fontName.contains("Oblique")) {
+            style = Font.ITALIC;
+        }
+        
+        currentFont = new Font(javaFontName, style, (int)fontSize);
+        svgGenerator.setFont(currentFont);
+    }
+    
+    @Override
+    public void showText(String text) {
+        if (!inTextMode) {
+            logger.log(Level.WARNING, "showText called outside text mode: {0}", text);
+            return;
+        }
+        
+        if (currentFont == null) {
+            logger.log(Level.WARNING, "showText called with no font set: {0}", text);
+            currentFont = new Font("SansSerif", Font.PLAIN, 12); // Default font
+            svgGenerator.setFont(currentFont);
+        }
+        
+        logger.log(Level.FINE, "showText: text=\"{0}\", position=({1},{2})", 
+                 new Object[]{text, textPosition.getX(), textPosition.getY()});
+        
+        // Save current transform
+        AffineTransform savedTransform = svgGenerator.getTransform();
+        
+        try {
+            // Apply text matrix transform
+            svgGenerator.transform(textMatrix);
+            
+            // Draw the text
+            svgGenerator.drawString(text, (float)textPosition.getX(), (float)textPosition.getY());
+            
+            // Update text position (simple advance, not accounting for text metrics)
+            if (currentFont != null) {
+                FontMetrics metrics = svgGenerator.getFontMetrics(currentFont);
+                textPosition.setLocation(
+                    textPosition.getX() + metrics.stringWidth(text),
+                    textPosition.getY()
+                );
+            }
+        } finally {
+            // Restore transform
+            svgGenerator.setTransform(savedTransform);
+        }
+    }
+    
+    @Override
+    public void moveText(double x, double y) {
+        textPosition = new Point2D.Double(x, y);
+        logger.log(Level.FINE, "moveText: New position=({0},{1})", new Object[]{x, y});
+    }
+    
+    @Override
+    public void setTextMatrix(double[] matrix) {
+        if (matrix.length != 6) {
+            logger.log(Level.WARNING, "setTextMatrix: Invalid matrix length: {0}", matrix.length);
+            return;
+        }
+        
+        textMatrix = new AffineTransform(
+            matrix[0], matrix[1],
+            matrix[2], matrix[3],
+            matrix[4], matrix[5]
+        );
+        
+        logger.log(Level.FINE, "setTextMatrix: matrix=[{0}]", 
+                formatAffineTransform(textMatrix));
+    }
+
+    // --- Additional Transformation Methods ---
+    @Override
+    public void scale(double sx, double sy) {
+        AffineTransform scaleTransform = AffineTransform.getScaleInstance(sx, sy);
+        svgGenerator.transform(scaleTransform);
+    }
+    
+    @Override
+    public void translate(double tx, double ty) {
+        AffineTransform translateTransform = AffineTransform.getTranslateInstance(tx, ty);
+        svgGenerator.transform(translateTransform);
+    }
+    
+    @Override
+    public void saveGraphicsState() {
+        gsave(); // Reuse the existing gsave implementation
+    }
+    
+    @Override
+    public void restoreGraphicsState() {
+        grestore(); // Reuse the existing grestore implementation
     }
 } 
