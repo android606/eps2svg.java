@@ -1,0 +1,9 @@
+# Maven build directory
+target/
+
+# Test output directories
+test/output/
+test/output/test_paths/
+
+# Logs
+*.log
