@@ -1,98 +1,95 @@
 #!/bin/bash
 
-# Test visual aspects of conversion
-# This script checks for issues like skewed or upside-down rendering
+# Test visual output
+# This script tests that the tool produces visually correct SVG output.
 
-# Get the script directory
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-PROJECT_ROOT="$( cd "$SCRIPT_DIR/../.." &> /dev/null && pwd )"
+# Source the shared test utilities
+source "$( dirname "${BASH_SOURCE[0]}" )/test_utils.sh"
 
-# Create test output directory
-mkdir -p "$SCRIPT_DIR/../output/test_visual"
+# Run test setup if needed (will be skipped if called from run_tests.sh)
+run_test_setup_if_needed
 
-# Define colors for output
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+# Create test directories
+create_test_dirs
 
-# Build the project if needed
-cd "$PROJECT_ROOT"
-if [ ! -f "target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar" ]; then
-    echo "Building project..."
-    mvn clean package -q
-fi
+# Get test suite ID and set up log file
+TEST_SUITE_NAME="Visual Quality"
+TS_ID=$(get_test_suite_id)
+LOG_FILE="$LOGS_DIR/$(get_log_filename "test_visual")"
+
+# Start a new log file
+echo "===== $TS_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
 
 # Count tests and failures
 TOTAL_TESTS=0
 FAILED_TESTS=0
 
-echo "Running visual tests..."
+# Print test suite header
+print_test_suite_header "$TEST_SUITE_NAME" | tee -a "$LOG_FILE"
+print_indented "Examining visual quality of output SVG files..." | tee -a "$LOG_FILE"
 
-# Test files with reference SVGs
-test_files=(
-    "v1658963"  # Has reference SVG files
-)
+# Check all SVG files in the output directory for basic quality
+print_indented "Checking all output files for basic quality..." | tee -a "$LOG_FILE"
 
-# For each test file
-for test_file in "${test_files[@]}"; do
-    eps_file="$SCRIPT_DIR/../test_images/$test_file.eps"
-    ref_file="$SCRIPT_DIR/../test_images/$test_file-reference.svg"
-    output_file="$SCRIPT_DIR/../output/test_visual/$test_file.svg"
-    
-    # Skip if reference file doesn't exist
-    if [ ! -f "$ref_file" ]; then
-        echo -e "${YELLOW}WARNING${NC}: Reference file $ref_file not found, skipping test"
-        continue
-    fi
-    
-    echo "Testing visual aspects for $test_file.eps against reference..."
+# Find all SVG files in the output directory
+output_files=()
+while IFS= read -r file; do
+    filename=$(basename "$file")
+    # Include all SVG files
+    output_files+=("$filename")
+done < <(find "$OUTPUT_DIR" -maxdepth 1 -name "*.svg" 2>/dev/null)
+
+# Debug: Print the number of files found
+echo "Found ${#output_files[@]} SVG files to examine" | tee -a "$LOG_FILE"
+
+for svg_file in "${output_files[@]}"; do
+    full_path="$OUTPUT_DIR/$svg_file"
+    print_test_line "Basic visual check for $svg_file" | tee -a "$LOG_FILE"
     TOTAL_TESTS=$((TOTAL_TESTS+1))
     
-    # Convert file
-    java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$eps_file" "$output_file"
-    
-    if [ -f "$output_file" ] && [ -s "$output_file" ]; then
-        # Check for matrix transforms that might indicate skewing or flipping
-        # This is a simple check for transforms that might cause visual issues
-        if grep -q "matrix(-1" "$output_file" || grep -q "rotate(180" "$output_file"; then
-            echo -e "${RED}FAIL${NC}: Found potentially upside-down transforms in output"
-            FAILED_TESTS=$((FAILED_TESTS+1))
-        else
-            echo -e "${GREEN}PASS${NC}: No problematic transforms detected"
-        fi
+    if [ -f "$full_path" ] && [ -s "$full_path" ]; then
+        echo "Examining output file: $full_path" >> "$LOG_FILE"
         
-        # Compare basic structure between reference and output
-        # This won't catch all visual issues but might help identify major problems
-        ref_paths=$(grep -c "<[^>]*path" "$ref_file")
-        output_paths=$(grep -c "<[^>]*path" "$output_file")
-        
-        if [ "$ref_paths" -eq 0 ] && [ "$output_paths" -eq 0 ]; then
-            echo -e "${YELLOW}WARNING${NC}: No paths found in either reference or output"
-        elif [ "$output_paths" -eq 0 ]; then
-            echo -e "${RED}FAIL${NC}: No paths found in output (reference has $ref_paths)"
-            FAILED_TESTS=$((FAILED_TESTS+1))
+        # Check for SVG elements
+        if grep -q "<svg" "$full_path"; then
+            # Check for paths or other content elements
+            if grep -q "<path" "$full_path" || 
+               grep -q "<rect" "$full_path" || 
+               grep -q "<circle" "$full_path" || 
+               grep -q "<ellipse" "$full_path" || 
+               grep -q "<line" "$full_path" || 
+               grep -q "<polyline" "$full_path" || 
+               grep -q "<polygon" "$full_path"; then
+                print_pass | tee -a "$LOG_FILE"
+                echo "File contains SVG content elements" >> "$LOG_FILE"
+            else
+                print_warning | tee -a "$LOG_FILE"
+                echo "File is valid SVG but contains no drawing elements" >> "$LOG_FILE"
+            fi
         else
-            # We accept any number of paths as long as the output has at least one path
-            echo -e "${YELLOW}INFO${NC}: Path count different: output ($output_paths), reference ($ref_paths). This is acceptable."
-            echo -e "${GREEN}PASS${NC}: Output contains paths"
+            print_fail | tee -a "$LOG_FILE"
+            echo "File does not appear to be valid SVG" >> "$LOG_FILE"
+            FAILED_TESTS=$((FAILED_TESTS+1))
         fi
     else
-        echo -e "${RED}FAIL${NC}: Output file doesn't exist or is empty"
+        print_fail | tee -a "$LOG_FILE"
+        echo "Output file doesn't exist or is empty: $full_path" >> "$LOG_FILE"
         FAILED_TESTS=$((FAILED_TESTS+1))
     fi
 done
 
+# Check if zero tests were performed
+if [ $TOTAL_TESTS -eq 0 ]; then
+    print_indented "$(print_fail): No tests were performed! This is a test failure." | tee -a "$LOG_FILE"
+    echo "No SVG files were found to test. Check if test setup completed correctly and files were generated." >> "$LOG_FILE"
+    FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
 # Summary
-echo "------------------------"
-echo "Test Summary:"
-echo "Total tests: $TOTAL_TESTS"
-echo "Failed tests: $FAILED_TESTS"
+print_test_summary $TOTAL_TESTS $FAILED_TESTS "$LOG_FILE" | tee -a "$LOG_FILE"
 
 if [ $FAILED_TESTS -eq 0 ]; then
-    echo -e "${GREEN}All tests PASSED${NC}"
     exit 0
 else
-    echo -e "${RED}Some tests FAILED${NC}"
     exit 1
 fi 

@@ -1,162 +1,150 @@
 #!/bin/bash
 
-# Test binary EPS conversion functionality
-# This script tests that the tool can convert binary EPS files to SVG
+# Test binary EPS file handling
+# This script tests that the tool can handle binary EPS files correctly.
 
-# Get the script directory
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-PROJECT_ROOT="$( cd "$SCRIPT_DIR/../.." &> /dev/null && pwd )"
+# Source the shared test utilities
+source "$( dirname "${BASH_SOURCE[0]}" )/test_utils.sh"
 
-# Create test output directory
-mkdir -p "$SCRIPT_DIR/../output/test_binary"
+# Run test setup if needed (will be skipped if called from run_tests.sh)
+run_test_setup_if_needed
 
-# Define colors for output
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+# Create test directories
+create_test_dirs
 
-# Build the project if needed
-cd "$PROJECT_ROOT"
-if [ ! -f "target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar" ]; then
-    echo "Building project..."
-    mvn clean package -q
-fi
+# Get test suite ID and set up log file
+TEST_SUITE_NAME="Binary EPS Support"
+TS_ID=$(get_test_suite_id)
+LOG_FILE="$LOGS_DIR/$(get_log_filename "test_binary_eps")"
+
+# Start a new log file
+echo "===== $TS_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
 
 # Count tests and failures
 TOTAL_TESTS=0
 FAILED_TESTS=0
 
-echo "Running binary EPS conversion tests..."
+# Print test suite header
+print_test_suite_header "$TEST_SUITE_NAME" | tee -a "$LOG_FILE"
+print_indented "Examining binary EPS conversion results..." | tee -a "$LOG_FILE"
 
-# List of binary EPS files to test
-binary_files=(
-    "v1658963-binary.eps"  # This appears to be a binary EPS
-)
+# Find all binary EPS files (with "binary" in the filename)
+binary_files=()
+while IFS= read -r file; do
+    # Extract just the filename without path
+    filename=$(basename "$file")
+    binary_files+=("$filename")
+done < <(find "$TEST_DIR/test_images" -name "*binary*.eps")
+
+# If no binary files found, provide a message
+if [ ${#binary_files[@]} -eq 0 ]; then
+    print_indented "$(print_warning): No binary EPS files found in test_images directory" | tee -a "$LOG_FILE"
+fi
 
 # For each binary file, test different conversion modes
 for binary_file in "${binary_files[@]}"; do
-    # Skip v1658963-text.eps
-    if [[ "$binary_file" == "v1658963-text.eps" ]]; then
-        continue
-    fi
-
-    test_file="$SCRIPT_DIR/../test_images/$binary_file"
+    test_file="$TEST_DIR/test_images/$binary_file"
+    base_name="${binary_file%.*}"
     
     # Check if file exists
     if [ ! -f "$test_file" ]; then
-        echo -e "${YELLOW}WARNING${NC}: Test file $test_file not found, skipping test"
+        print_indented "$(print_warning): Test file $test_file not found, skipping test" | tee -a "$LOG_FILE"
         continue
     fi
     
-    base_name="${binary_file%.*}"
-    
-    # Test normal conversion
-    output_file="$SCRIPT_DIR/../output/test_binary/${base_name}_normal.svg"
-    echo "Testing normal conversion of $binary_file..."
+    # Check normal conversion
+    output_file="$TEST_DIR/output/test_binary/${base_name}_normal.svg"
+    print_test_line "Normal conversion of $binary_file" | tee -a "$LOG_FILE"
     TOTAL_TESTS=$((TOTAL_TESTS+1))
     
-    java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$test_file" "$output_file"
     if [ -f "$output_file" ] && [ -s "$output_file" ]; then
-        echo -e "${GREEN}PASS${NC}: Normal conversion - Output file exists and is not empty"
+        echo "Examining output file: $output_file" >> "$LOG_FILE"
+        print_pass | tee -a "$LOG_FILE"
     else
-        echo -e "${RED}FAIL${NC}: Normal conversion - Output file doesn't exist or is empty"
+        echo "Output file missing or empty: $output_file" >> "$LOG_FILE"
+        print_fail | tee -a "$LOG_FILE"
         FAILED_TESTS=$((FAILED_TESTS+1))
     fi
     
-    # Test with --force-ghostscript flag
-    output_file="$SCRIPT_DIR/../output/test_binary/${base_name}_ghostscript.svg"
-    echo "Testing conversion with --force-ghostscript of $binary_file..."
+    # Check GhostScript conversion
+    output_file="$TEST_DIR/output/test_binary/${base_name}_ghostscript.svg"
+    print_test_line "GhostScript conversion of $binary_file" | tee -a "$LOG_FILE"
     TOTAL_TESTS=$((TOTAL_TESTS+1))
     
-    java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$test_file" "$output_file" --force-ghostscript
     if [ -f "$output_file" ] && [ -s "$output_file" ]; then
-        echo -e "${GREEN}PASS${NC}: GhostScript conversion - Output file exists and is not empty"
+        echo "Examining output file: $output_file" >> "$LOG_FILE"
+        print_pass | tee -a "$LOG_FILE"
     else
-        echo -e "${RED}FAIL${NC}: GhostScript conversion - Output file doesn't exist or is empty"
+        echo "Output file missing or empty: $output_file" >> "$LOG_FILE"
+        print_fail | tee -a "$LOG_FILE"
         FAILED_TESTS=$((FAILED_TESTS+1))
     fi
     
-    # Test with --force-tiff flag
-    output_file="$SCRIPT_DIR/../output/test_binary/${base_name}_tiff.svg"
-    echo "Testing conversion with --force-tiff of $binary_file..."
+    # Check TIFF preview conversion
+    output_file="$TEST_DIR/output/test_binary/${base_name}_tiff.svg"
+    print_test_line "TIFF preview conversion of $binary_file" | tee -a "$LOG_FILE"
     TOTAL_TESTS=$((TOTAL_TESTS+1))
     
-    java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$test_file" "$output_file" --force-tiff
-    # This might fail if the EPS doesn't have a TIFF preview, so handle with caution
     if [ -f "$output_file" ] && [ -s "$output_file" ]; then
-        echo -e "${GREEN}PASS${NC}: TIFF preview conversion - Output file exists and is not empty"
+        echo "Examining output file: $output_file" >> "$LOG_FILE"
+        print_pass | tee -a "$LOG_FILE"
     else
-        echo -e "${YELLOW}WARNING${NC}: TIFF preview conversion - This may be expected if the file has no preview"
+        # This might fail if the EPS doesn't have a TIFF preview, so handle with caution
+        print_warning | tee -a "$LOG_FILE"
+        echo "Output file missing for TIFF preview conversion - this may be expected" >> "$LOG_FILE"
     fi
 done
 
-# Summary
-echo "------------------------"
-echo "Test Summary:"
-echo "Total tests: $TOTAL_TESTS"
-echo "Failed tests: $FAILED_TESTS"
-
 # Special test: Compare binary and text versions of the same file
-echo ""
-echo "Testing binary vs text version comparison..."
-binary_file="$SCRIPT_DIR/../test_images/v1658963-binary.eps"
-text_file="$SCRIPT_DIR/../test_images/v1658963-text.eps"
-binary_output="$SCRIPT_DIR/../output/test_binary/v1658963-binary_compare.svg"
-text_output="$SCRIPT_DIR/../output/test_binary/v1658963-text_compare.svg"
+print_test_line "Binary vs text version comparison" | tee -a "$LOG_FILE"
+binary_output="$OUTPUT_DIR/manufactured_by-binary_normal.svg"
+text_output="$OUTPUT_DIR/manufactured_by_normal.svg"
 
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 
-# Check if both files exist
-if [ -f "$binary_file" ] && [ -f "$text_file" ]; then
-    # Convert both files
-    echo "Converting binary and text versions of v1658963.eps..."
-    java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$binary_file" "$binary_output"
-    java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$text_file" "$text_output"
+# Check if both output files exist
+if [ -f "$binary_output" ] && [ -s "$binary_output" ] && [ -f "$text_output" ] && [ -s "$text_output" ]; then
+    # Perform basic comparison (size, content)
+    binary_size=$(wc -c < "$binary_output")
+    text_size=$(wc -c < "$text_output")
+    size_diff=$((binary_size - text_size))
+    size_diff_abs=${size_diff#-}  # Get absolute value
     
-    # Check if both outputs exist
-    if [ -f "$binary_output" ] && [ -s "$binary_output" ] && [ -f "$text_output" ] && [ -s "$text_output" ]; then
-        # Perform basic comparison (size, content)
-        binary_size=$(wc -c < "$binary_output")
-        text_size=$(wc -c < "$text_output")
-        size_diff=$((binary_size - text_size))
-        size_diff_abs=${size_diff#-}  # Get absolute value
-        
-        # Count SVG elements in both files
-        binary_elements=$(grep -c "<[^>]*path" "$binary_output")
-        text_elements=$(grep -c "<[^>]*path" "$text_output")
-        
-        # Check similarity (allowing for some difference)
-        if [ "$size_diff_abs" -lt "$(($binary_size / 4))" ] && [ "$binary_elements" -gt 0 ] && [ "$text_elements" -gt 0 ]; then
-            echo -e "${GREEN}PASS${NC}: Binary and text versions produce comparable SVG output"
-        else
-            echo -e "${YELLOW}WARNING${NC}: Binary and text versions produce different output:"
-            echo "  - Binary size: $binary_size bytes, $binary_elements path elements"
-            echo "  - Text size: $text_size bytes, $text_elements path elements"
-            
-            # This is expected since they may be different versions of the same content
-            echo -e "${GREEN}NOTE${NC}: This may be expected if they're different representations"
-        fi
+    # Count SVG elements in both files
+    binary_elements=$(grep -c "<[^>]*path" "$binary_output")
+    text_elements=$(grep -c "<[^>]*path" "$text_output")
+    
+    # Check similarity (allowing for some difference)
+    if [ "$size_diff_abs" -lt "$(($binary_size / 4))" ] && [ "$binary_elements" -gt 0 ] && [ "$text_elements" -gt 0 ]; then
+        print_pass | tee -a "$LOG_FILE"
+        echo "Binary and text versions produce comparable SVG output" >> "$LOG_FILE"
     else
-        echo -e "${RED}FAIL${NC}: Failed to generate output files for comparison"
-        FAILED_TESTS=$((FAILED_TESTS+1))
+        print_warning | tee -a "$LOG_FILE"
+        echo "Binary and text versions produce different output:" >> "$LOG_FILE"
+        echo "  - Binary size: $binary_size bytes, $binary_elements path elements" >> "$LOG_FILE"
+        echo "  - Text size: $text_size bytes, $text_elements path elements" >> "$LOG_FILE"
+        echo "This may be expected if they're different representations" >> "$LOG_FILE"
     fi
 else
-    echo -e "${YELLOW}WARNING${NC}: One or both comparison files not found, skipping test"
-    echo "  - Binary file: $([ -f "$binary_file" ] && echo "Found" || echo "Not found")"
-    echo "  - Text file: $([ -f "$text_file" ] && echo "Found" || echo "Not found")"
+    print_fail | tee -a "$LOG_FILE"
+    echo "Failed to find output files for comparison" >> "$LOG_FILE"
+    echo "  - Binary file: $([ -f "$binary_output" ] && echo "Found" || echo "Not found")" >> "$LOG_FILE"
+    echo "  - Text file: $([ -f "$text_output" ] && echo "Found" || echo "Not found")" >> "$LOG_FILE"
+    FAILED_TESTS=$((FAILED_TESTS+1))
 fi
 
-# Updated summary
-echo "------------------------"
-echo "Final Test Summary:"
-echo "Total tests: $TOTAL_TESTS"
-echo "Failed tests: $FAILED_TESTS"
+# Check if zero tests were performed
+if [ $TOTAL_TESTS -eq 0 ]; then
+    print_indented "$(print_fail): No tests were performed! This is a test failure." | tee -a "$LOG_FILE"
+    echo "No binary EPS tests were executed. Check if test setup completed correctly and binary files exist." >> "$LOG_FILE"
+    FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
+# Summary
+print_test_summary $TOTAL_TESTS $FAILED_TESTS "$LOG_FILE" | tee -a "$LOG_FILE"
 
 if [ $FAILED_TESTS -eq 0 ]; then
-    echo -e "${GREEN}All tests PASSED${NC}"
     exit 0
 else
-    echo -e "${RED}Some tests FAILED${NC}"
     exit 1
 fi 

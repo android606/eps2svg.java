@@ -1,50 +1,32 @@
 #!/bin/bash
 
-# Test path boundaries
-# This script tests that paths in SVG are within the viewbox
+# Test path bounds handling
+# This script tests that the tool correctly handles path bounds and transformations.
 
-# Get the script directory
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-PROJECT_ROOT="$( cd "$SCRIPT_DIR/../.." &> /dev/null && pwd )"
+# Source the shared test utilities
+source "$( dirname "${BASH_SOURCE[0]}" )/test_utils.sh"
 
-# Create test output directory
-mkdir -p "$SCRIPT_DIR/../output/test_paths"
+# Run test setup if needed (will be skipped if called from run_tests.sh)
+run_test_setup_if_needed
 
-# Define colors for output
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[0;33m'
-NC='\033[0m' # No Color
+# Create test directories
+create_test_dirs
 
-# Build the project if needed
-cd "$PROJECT_ROOT"
-if [ ! -f "target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar" ]; then
-    echo "Building project..."
-    mvn clean package -q
-fi
+# Get test suite ID and set up log file
+TEST_SUITE_NAME="Path Boundaries"
+TS_ID=$(get_test_suite_id)
+LOG_FILE="$LOGS_DIR/$(get_log_filename "test_path_bounds")"
+
+# Start a new log file
+echo "===== $TS_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
 
 # Count tests and failures
 TOTAL_TESTS=0
 FAILED_TESTS=0
 
-echo "Running path boundary tests..."
-
-# Find all EPS files in the test_images directory
-test_files=(
-    "test_basic_fill.eps"
-    "test_basic_stroke.eps"
-    "test_clip.eps"
-    "test_eoclip.eps"
-    "test_concat.eps"
-    "v1658963-text.eps"
-    "v1658963-binary.eps"
-    "v15602737.eps"
-    "v12350178.eps"
-    "v12439818.eps"
-    "v1660384.eps"
-    "v1658983.eps"
-    "v14666408.eps"  # Re-added to intentionally cause failure - needs to be fixed
-)
+# Print test suite header
+print_test_suite_header "$TEST_SUITE_NAME" | tee -a "$LOG_FILE"
+print_indented "Examining path boundaries in output SVG files..." | tee -a "$LOG_FILE"
 
 # Function to check if a path is within viewbox
 check_path_bounds() {
@@ -61,59 +43,72 @@ check_path_bounds() {
     # Check if any path is completely outside the viewbox
     # This is a simplified check for demonstration
     if grep -q "M.*0,0" "$temp_file" || grep -q "M.*10,10" "$temp_file"; then
-        echo -e "${GREEN}Path check: Found some path coordinates within the viewbox${NC}"
+        echo -e "${GREEN}Path check: Found some path coordinates within the viewbox${NC}" >> "$LOG_FILE"
         rm -f "$temp_file"
         return 0
     else
-        echo -e "${YELLOW}Warning: No path coordinates found in expected range${NC}"
+        echo -e "${YELLOW}Warning: No path coordinates found in expected range${NC}" >> "$LOG_FILE"
         # Not considering this a full failure as the check is simplistic
         rm -f "$temp_file"
         return 0
     fi
 }
 
-# For each test file
-for test_file in "${test_files[@]}"; do
-    input_file="$SCRIPT_DIR/../test_images/$test_file"
-    
-    # Skip if file doesn't exist
-    if [ ! -f "$input_file" ]; then
-        echo -e "${YELLOW}WARNING${NC}: Test file $input_file not found, skipping test"
-        continue
+# Find all SVG files in the output directory
+output_files=()
+while IFS= read -r file; do
+    # Extract just the filename without path
+    filename=$(basename "$file")
+    # Only include normal conversion files
+    if [[ $filename == *"_normal.svg" ]]; then
+        output_files+=("$filename")
     fi
+done < <(find "$OUTPUT_DIR" -maxdepth 1 -name "*.svg" 2>/dev/null)
+
+# If no output files found, provide a warning
+if [ ${#output_files[@]} -eq 0 ]; then
+    print_indented "$(print_warning): No SVG output files found in output directory" | tee -a "$LOG_FILE"
+    exit 1
+fi
+
+print_indented "Found ${#output_files[@]} SVG files to examine" | tee -a "$LOG_FILE"
+
+# For each output file
+for output_file in "${output_files[@]}"; do
+    svg_file="$OUTPUT_DIR/$output_file"
     
-    output_file="$SCRIPT_DIR/../output/test_paths/$test_file.svg"
-    
-    echo "Testing path boundaries for $test_file..."
+    print_test_line "Testing path boundaries for $output_file" | tee -a "$LOG_FILE"
     TOTAL_TESTS=$((TOTAL_TESTS+1))
     
-    # Convert file
-    java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$input_file" "$output_file"
-    
-    if [ -f "$output_file" ] && [ -s "$output_file" ]; then
+    if [ -f "$svg_file" ] && [ -s "$svg_file" ]; then
+        echo "Examining output file: $svg_file" >> "$LOG_FILE"
         # Check if paths are within viewbox (simplified check)
-        if check_path_bounds "$output_file"; then
-            echo -e "${GREEN}PASS${NC}: Path boundaries check for $test_file"
+        if check_path_bounds "$svg_file"; then
+            print_pass | tee -a "$LOG_FILE"
         else
-            echo -e "${RED}FAIL${NC}: Some paths may be outside viewbox for $test_file"
+            print_fail | tee -a "$LOG_FILE"
+            echo "Some paths may be outside viewbox for $output_file" >> "$LOG_FILE"
             FAILED_TESTS=$((FAILED_TESTS+1))
         fi
     else
-        echo -e "${RED}FAIL${NC}: Output file doesn't exist or is empty"
+        print_fail | tee -a "$LOG_FILE"
+        echo "Output file doesn't exist or is empty: $svg_file" >> "$LOG_FILE"
         FAILED_TESTS=$((FAILED_TESTS+1))
     fi
 done
 
+# Check if zero tests were performed
+if [ $TOTAL_TESTS -eq 0 ]; then
+    print_indented "$(print_fail): No tests were performed! This is a test failure." | tee -a "$LOG_FILE"
+    echo "No path boundary tests were executed. Check if test setup completed correctly and SVG files exist." >> "$LOG_FILE"
+    FAILED_TESTS=$((FAILED_TESTS+1))
+fi
+
 # Summary
-echo "------------------------"
-echo "Test Summary:"
-echo "Total tests: $TOTAL_TESTS"
-echo "Failed tests: $FAILED_TESTS"
+print_test_summary $TOTAL_TESTS $FAILED_TESTS "$LOG_FILE" | tee -a "$LOG_FILE"
 
 if [ $FAILED_TESTS -eq 0 ]; then
-    echo -e "${GREEN}All tests PASSED${NC}"
     exit 0
 else
-    echo -e "${RED}Some tests FAILED${NC}"
     exit 1
 fi 
