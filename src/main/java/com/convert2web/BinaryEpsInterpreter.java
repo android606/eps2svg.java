@@ -3,6 +3,16 @@ package com.convert2web;
 import java.io.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.awt.Color;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import java.util.Stack;
+import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.StringTokenizer;
+import java.util.HashMap;
+import java.awt.geom.Point2D;
 
 /**
  * Interprets binary EPS files and converts them to PDF/SVG using external tools.
@@ -136,12 +146,12 @@ public class BinaryEpsInterpreter {
                 
                 if (bbox != null && bbox.length == 4) {
                     // Initialize graphics handler with the bounding box
-                    graphicsHandler.initialize(bbox[0], bbox[1], bbox[2], bbox[3]);
+                    initializeWithBBox(bbox[0], bbox[1], bbox[2], bbox[3]);
                     logger.info("Initialized graphics handler with BBox: " + 
                                  bbox[0] + "," + bbox[1] + "," + bbox[2] + "," + bbox[3]);
                 } else {
                     logger.warning("Failed to extract BBox from binary EPS. Using default (0,0,100,100)");
-                    graphicsHandler.initialize(0.0, 0.0, 100.0, 100.0);
+                    initializeWithDefaults();
                 }
                 
                 // Convert binary EPS to SVG using GhostScript
@@ -170,7 +180,7 @@ public class BinaryEpsInterpreter {
                            (forceTiff ? " (forced by flag)" : ""));
                 
                 // Set up a fixed size for the TIFF preview
-                graphicsHandler.initialize(0.0, 0.0, 100.0, 100.0);
+                initializeWithDefaults();
                 
                 if (forceTiff && (header == null || !header.hasPreview)) {
                     throw new IOException("TIFF preview was forced, but no preview data is available in the EPS file.");
@@ -217,12 +227,7 @@ public class BinaryEpsInterpreter {
                 double[] fixedBoundingBox = {0, 0, 100, 100};
                 
                 // Initialize graphics handler with the fixed bounding box
-                graphicsHandler.initialize(
-                    fixedBoundingBox[0], 
-                    fixedBoundingBox[1], 
-                    fixedBoundingBox[2], 
-                    fixedBoundingBox[3]
-                );
+                initializeWithBBox(fixedBoundingBox[0], fixedBoundingBox[1], fixedBoundingBox[2], fixedBoundingBox[3]);
                 
                 // If preview data is available, use it
                 if (header.hasPreview && header.previewData != null) {
@@ -358,7 +363,7 @@ public class BinaryEpsInterpreter {
             double height = 100;
             
             // Initialize with optimized viewbox
-            graphicsHandler.initialize(0, 0, width, height);
+            initializeWithDefaults();
             
             // Draw the background and border
             graphicsHandler.newPath();
@@ -401,16 +406,54 @@ public class BinaryEpsInterpreter {
      * Parse PostScript commands from the EPS data
      */
     private boolean parsePostScriptCommands(byte[] psData) {
-        // Basic PostScript parsing for simple commands
-        // For a complete implementation, a full PostScript interpreter would be needed
+        // More comprehensive PostScript parsing
         try {
             String psString = new String(psData);
-            String[] lines = psString.split("\\r?\\n");
+            BufferedReader reader = new BufferedReader(new StringReader(psString));
             
+            Stack<Object> operandStack = new Stack<>();
+            Map<String, Object> userDict = new HashMap<>();
+            
+            String line;
             boolean inDefinition = false;
-            double x = 0, y = 0;
+            boolean inProcedure = false;
+            List<Object> currentProc = null;
             
-            for (String line : lines) {
+            // Look for and parse BoundingBox if available
+            double[] boundingBox = null;
+            String tempLine;
+            reader.mark(8192); // Mark position to return to after header scan
+            while ((tempLine = reader.readLine()) != null) {
+                tempLine = tempLine.trim();
+                if (tempLine.startsWith("%%BoundingBox:")) {
+                    String[] parts = tempLine.substring("%%BoundingBox:".length()).trim().split("\\s+");
+                    if (parts.length >= 4) {
+                        boundingBox = new double[4];
+                        for (int i = 0; i < 4; i++) {
+                            boundingBox[i] = Double.parseDouble(parts[i]);
+                        }
+                        logger.info("Found BoundingBox in PS data: " + 
+                                   boundingBox[0] + "," + boundingBox[1] + "," + 
+                                   boundingBox[2] + "," + boundingBox[3]);
+                        break;
+                    }
+                }
+                if (tempLine.startsWith("%%EndComments")) {
+                    break; // End of header section
+                }
+            }
+            reader.reset(); // Return to beginning of file
+            
+            // Initialize graphics with the bounding box if found, otherwise use default
+            if (boundingBox != null) {
+                initializeWithBBox(boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3]);
+            } else {
+                logger.warning("BoundingBox not found in PS data. Using default 0,0,100,100");
+                initializeWithDefaults();
+            }
+            
+            // Process the PostScript commands
+            while ((line = reader.readLine()) != null) {
                 line = line.trim();
                 
                 // Skip comments and empty lines
@@ -418,44 +461,209 @@ public class BinaryEpsInterpreter {
                     continue;
                 }
                 
-                // Very simple parsing of some basic commands
-                if (line.contains(" moveto")) {
-                    String[] parts = line.split(" moveto")[0].trim().split("\\s+");
-                    if (parts.length >= 2) {
-                        x = Double.parseDouble(parts[parts.length - 2]);
-                        y = Double.parseDouble(parts[parts.length - 1]);
-                        graphicsHandler.moveTo(x, y);
-                    }
-                } else if (line.contains(" lineto")) {
-                    String[] parts = line.split(" lineto")[0].trim().split("\\s+");
-                    if (parts.length >= 2) {
-                        x = Double.parseDouble(parts[parts.length - 2]);
-                        y = Double.parseDouble(parts[parts.length - 1]);
-                        graphicsHandler.lineTo(x, y);
-                    }
-                } else if (line.equals("stroke")) {
-                    graphicsHandler.stroke();
-                } else if (line.equals("fill")) {
-                    graphicsHandler.fill();
-                } else if (line.contains(" setrgbcolor")) {
-                    String[] parts = line.split(" setrgbcolor")[0].trim().split("\\s+");
-                    if (parts.length >= 3) {
-                        double r = Double.parseDouble(parts[parts.length - 3]);
-                        double g = Double.parseDouble(parts[parts.length - 2]);
-                        double b = Double.parseDouble(parts[parts.length - 1]);
-                        graphicsHandler.setRGBColorStroke(r, g, b);
-                        graphicsHandler.setRGBColorFill(r, g, b);
+                // Tokenize the line, respecting PS syntax better
+                String lineToProcess = line
+                    .replace("[", " [ ")
+                    .replace("]", " ] ")
+                    .replace("{", " { ")
+                    .replace("}", " } ")
+                    .replaceAll("\\s+", " ").trim();
+                
+                StringTokenizer tokenizer = new StringTokenizer(lineToProcess);
+                while (tokenizer.hasMoreTokens()) {
+                    String token = tokenizer.nextToken();
+                    
+                    // Process the token based on its type and context
+                    if (token.equals("{")) {
+                        // Start of procedure definition
+                        inProcedure = true;
+                        currentProc = new ArrayList<>();
+                    } else if (token.equals("}")) {
+                        // End of procedure definition
+                        inProcedure = false;
+                        operandStack.push(currentProc);
+                        currentProc = null;
+                    } else if (inProcedure && currentProc != null) {
+                        // Add token to procedure definition
+                        currentProc.add(token);
+                    } else if (token.equals("def")) {
+                        // Handle definition
+                        if (operandStack.size() >= 2) {
+                            Object value = operandStack.pop();
+                            Object key = operandStack.pop();
+                            
+                            if (key instanceof String && ((String)key).startsWith("/")) {
+                                String keyName = ((String)key).substring(1); // Remove leading '/'
+                                userDict.put(keyName, value);
+                                logger.fine("Defined " + keyName + " = " + value);
+                            } else {
+                                logger.warning("def operator: key " + key + " is not a name literal.");
+                            }
+                        } else {
+                            logger.warning("Not enough operands for def operator");
+                        }
+                    } else if (token.equals("moveto") || token.equals("rmoveto")) {
+                        // Handle moveto
+                        if (operandStack.size() >= 2) {
+                            double y = getDoubleValue(operandStack.pop());
+                            double x = getDoubleValue(operandStack.pop());
+                            if (token.equals("moveto")) {
+                                graphicsHandler.moveTo(x, y);
+                            } else { // rmoveto - relative move
+                                // This would need current position tracking - simplified here
+                                graphicsHandler.moveTo(x, y);
+                            }
+                        } else {
+                            logger.warning("Not enough operands for " + token + " operator");
+                        }
+                    } else if (token.equals("lineto") || token.equals("rlineto")) {
+                        // Handle lineto
+                        if (operandStack.size() >= 2) {
+                            double y = getDoubleValue(operandStack.pop());
+                            double x = getDoubleValue(operandStack.pop());
+                            if (token.equals("lineto")) {
+                                graphicsHandler.lineTo(x, y);
+                            } else { // rlineto - relative line
+                                // This would need current position tracking - simplified here
+                                graphicsHandler.lineTo(x, y);
+                            }
+                        } else {
+                            logger.warning("Not enough operands for " + token + " operator");
+                        }
+                    } else if (token.equals("curveto")) {
+                        // Handle curveto (Bezier curve)
+                        if (operandStack.size() >= 6) {
+                            double y3 = getDoubleValue(operandStack.pop());
+                            double x3 = getDoubleValue(operandStack.pop());
+                            double y2 = getDoubleValue(operandStack.pop());
+                            double x2 = getDoubleValue(operandStack.pop());
+                            double y1 = getDoubleValue(operandStack.pop());
+                            double x1 = getDoubleValue(operandStack.pop());
+                            graphicsHandler.curveTo(x1, y1, x2, y2, x3, y3);
+                        } else {
+                            logger.warning("Not enough operands for curveto operator");
+                        }
+                    } else if (token.equals("closepath")) {
+                        // Handle closepath
+                        graphicsHandler.closePath();
+                    } else if (token.equals("stroke")) {
+                        // Handle stroke
+                        graphicsHandler.stroke();
+                    } else if (token.equals("fill")) {
+                        // Handle fill
+                        graphicsHandler.fill();
+                    } else if (token.equals("newpath")) {
+                        // Handle newpath
+                        graphicsHandler.newPath();
+                    } else if (token.equals("setrgbcolor")) {
+                        // Handle setrgbcolor
+                        if (operandStack.size() >= 3) {
+                            double b = getDoubleValue(operandStack.pop());
+                            double g = getDoubleValue(operandStack.pop());
+                            double r = getDoubleValue(operandStack.pop());
+                            graphicsHandler.setRGBColorStroke(r, g, b);
+                            graphicsHandler.setRGBColorFill(r, g, b);
+                        } else {
+                            logger.warning("Not enough operands for setrgbcolor operator");
+                        }
+                    } else if (token.equals("setlinewidth")) {
+                        // Handle setlinewidth
+                        if (!operandStack.isEmpty()) {
+                            double width = getDoubleValue(operandStack.pop());
+                            graphicsHandler.setLineWidth(width);
+                        } else {
+                            logger.warning("Not enough operands for setlinewidth operator");
+                        }
+                    } else if (token.equals("setlinecap")) {
+                        // Handle setlinecap
+                        if (!operandStack.isEmpty()) {
+                            int cap = (int) getDoubleValue(operandStack.pop());
+                            graphicsHandler.setLineCap(cap);
+                        } else {
+                            logger.warning("Not enough operands for setlinecap operator");
+                        }
+                    } else if (token.equals("setlinejoin")) {
+                        // Handle setlinejoin
+                        if (!operandStack.isEmpty()) {
+                            int join = (int) getDoubleValue(operandStack.pop());
+                            graphicsHandler.setLineJoin(join);
+                        } else {
+                            logger.warning("Not enough operands for setlinejoin operator");
+                        }
+                    } else if (token.equals("gsave")) {
+                        // Handle gsave
+                        graphicsHandler.saveGraphicsState();
+                    } else if (token.equals("grestore")) {
+                        // Handle grestore
+                        graphicsHandler.restoreGraphicsState();
+                    } else if (token.startsWith("/")) {
+                        // Name literal
+                        operandStack.push(token);
+                    } else if (token.startsWith("(") && token.endsWith(")")) {
+                        // String literal
+                        operandStack.push(token.substring(1, token.length() - 1));
+                    } else {
+                        // Try to parse as number
+                        try {
+                            double number = Double.parseDouble(token);
+                            operandStack.push(number);
+                        } catch (NumberFormatException e) {
+                            // Check if it's a defined name
+                            if (userDict.containsKey(token)) {
+                                Object value = userDict.get(token);
+                                if (value instanceof List) {
+                                    // It's a procedure, execute it
+                                    executeProcedure((List<Object>) value, operandStack, userDict);
+                                } else {
+                                    // Push the value onto the stack
+                                    operandStack.push(value);
+                                }
+                            } else {
+                                // Unknown operator, log warning
+                                logger.fine("Unhandled PS token: " + token);
+                            }
+                        }
                     }
                 }
-                // Many more commands would need to be implemented for a complete parser
             }
             
-            logger.info("Basic PostScript parsing completed");
+            logger.info("PostScript parsing completed successfully");
             return true;
         } catch (Exception e) {
             logger.log(Level.WARNING, "Error parsing PostScript commands: " + e.getMessage(), e);
             return false;
         }
+    }
+    
+    /**
+     * Execute a PostScript procedure
+     */
+    private void executeProcedure(List<Object> procedure, Stack<Object> operandStack, Map<String, Object> userDict) {
+        // Simple procedure execution - in real PS, would need to handle complex control flow
+        for (Object item : procedure) {
+            if (item instanceof String) {
+                String token = (String) item;
+                // Execute the token... (simplified - would need to handle all operators)
+                logger.fine("Executing procedure token: " + token);
+            }
+        }
+    }
+    
+    /**
+     * Convert a stack object to double
+     */
+    private double getDoubleValue(Object obj) {
+        if (obj instanceof Number) {
+            return ((Number) obj).doubleValue();
+        } else if (obj instanceof String) {
+            try {
+                return Double.parseDouble((String) obj);
+            } catch (NumberFormatException e) {
+                logger.warning("Cannot convert to double: " + obj);
+                return 0.0;
+            }
+        }
+        return 0.0;
     }
     
     /**
@@ -621,18 +829,127 @@ public class BinaryEpsInterpreter {
     
     /**
      * Import the SVG file into our graphics handler
-     * This is a placeholder - the actual implementation would depend on the graphics handler
+     * This implementation parses the SVG content generated by GhostScript and
+     * translates it to graphics handler operations
      */
     private void importSvgToGraphicsHandler(String svgFilePath) {
         try {
             File svgFile = new File(svgFilePath);
             if (svgFile.exists() && svgFile.length() > 0) {
-                // Import SVG using an appropriate SVG reader/parser
                 logger.info("Importing SVG file: " + svgFilePath);
-                // This would be where you'd use an SVG parser to read the file and then
-                // translate the SVG elements to graphics handler operations
-                // For now, we just log a placeholder message
-                logger.warning("SVG import not yet fully implemented. Using visual placeholder.");
+                
+                // Create Batik SVG DOM parser
+                String parser = org.apache.batik.util.XMLResourceDescriptor.getXMLParserClassName();
+                org.apache.batik.dom.GenericDOMImplementation impl = (org.apache.batik.dom.GenericDOMImplementation)
+                        org.apache.batik.dom.GenericDOMImplementation.getDOMImplementation();
+                org.apache.batik.dom.util.SAXDocumentFactory factory = 
+                        new org.apache.batik.dom.util.SAXDocumentFactory(impl, parser);
+                
+                // Parse the SVG file
+                Document svgDocument = factory.createDocument(svgFile.toURI().toString());
+                Element svgRoot = svgDocument.getDocumentElement();
+                
+                // Get SVG viewBox or width/height for initialization
+                String viewBoxAttr = svgRoot.getAttribute("viewBox");
+                String widthAttr = svgRoot.getAttribute("width");
+                String heightAttr = svgRoot.getAttribute("height");
+                
+                double[] viewBox = null;
+                double width = 100;
+                double height = 100;
+                
+                // Parse viewBox if present
+                if (viewBoxAttr != null && !viewBoxAttr.isEmpty()) {
+                    String[] parts = viewBoxAttr.split("\\s+");
+                    if (parts.length >= 4) {
+                        viewBox = new double[4];
+                        for (int i = 0; i < 4; i++) {
+                            viewBox[i] = Double.parseDouble(parts[i]);
+                        }
+                        width = viewBox[2];
+                        height = viewBox[3];
+                    }
+                } else if (widthAttr != null && !widthAttr.isEmpty() && heightAttr != null && !heightAttr.isEmpty()) {
+                    // Parse width and height
+                    width = Double.parseDouble(widthAttr.replaceAll("[^0-9.]", ""));
+                    height = Double.parseDouble(heightAttr.replaceAll("[^0-9.]", ""));
+                    viewBox = new double[] {0, 0, width, height};
+                }
+                
+                // Initialize graphics handler with the SVG dimensions
+                initializeWithBBox(viewBox != null ? viewBox[0] : 0, 
+                        viewBox != null ? viewBox[1] : 0, 
+                        viewBox != null ? viewBox[0] + viewBox[2] : width, 
+                        viewBox != null ? viewBox[1] + viewBox[3] : height);
+                
+                // Process all path elements in the SVG
+                org.w3c.dom.NodeList pathElements = svgRoot.getElementsByTagName("path");
+                
+                // If no path elements found, try with namespace
+                if (pathElements.getLength() == 0) {
+                    pathElements = svgRoot.getElementsByTagNameNS("*", "path");
+                }
+                
+                if (pathElements.getLength() > 0) {
+                    logger.info("Found " + pathElements.getLength() + " path elements in SVG");
+                    
+                    // Process each path
+                    for (int i = 0; i < pathElements.getLength(); i++) {
+                        Element pathElement = (Element) pathElements.item(i);
+                        String pathData = pathElement.getAttribute("d");
+                        
+                        // Parse path style attributes
+                        String fill = pathElement.getAttribute("fill");
+                        String stroke = pathElement.getAttribute("stroke");
+                        String strokeWidth = pathElement.getAttribute("stroke-width");
+                        
+                        // Process path data
+                        if (pathData != null && !pathData.isEmpty()) {
+                            parseSvgPath(pathData);
+                            
+                            // Apply style
+                            if (fill != null && !fill.equals("none")) {
+                                // Parse fill color and apply
+                                Color fillColor = parseSvgColor(fill);
+                                if (fillColor != null) {
+                                    graphicsHandler.setRGBColorFill(
+                                            fillColor.getRed() / 255.0,
+                                            fillColor.getGreen() / 255.0,
+                                            fillColor.getBlue() / 255.0);
+                                }
+                                graphicsHandler.fill();
+                            }
+                            
+                            if (stroke != null && !stroke.equals("none")) {
+                                // Parse stroke color and apply
+                                Color strokeColor = parseSvgColor(stroke);
+                                if (strokeColor != null) {
+                                    graphicsHandler.setRGBColorStroke(
+                                            strokeColor.getRed() / 255.0,
+                                            strokeColor.getGreen() / 255.0,
+                                            strokeColor.getBlue() / 255.0);
+                                }
+                                
+                                // Apply stroke width if specified
+                                if (strokeWidth != null && !strokeWidth.isEmpty()) {
+                                    try {
+                                        double width_val = Double.parseDouble(strokeWidth.replaceAll("[^0-9.]", ""));
+                                        graphicsHandler.setLineWidth(width_val);
+                                    } catch (NumberFormatException e) {
+                                        logger.warning("Invalid stroke-width value: " + strokeWidth);
+                                    }
+                                }
+                                
+                                graphicsHandler.stroke();
+                            }
+                        }
+                    }
+                    
+                    logger.info("Successfully imported SVG graphics from " + svgFilePath);
+                    return;
+                } else {
+                    logger.warning("No path elements found in SVG file");
+                }
             } else {
                 logger.severe("SVG file not found or empty: " + svgFilePath);
             }
@@ -640,15 +957,223 @@ public class BinaryEpsInterpreter {
             logger.log(Level.SEVERE, "Error importing SVG: " + e.getMessage(), e);
         }
         
-        // Create a visual placeholder for binary EPS
+        // Fallback to a placeholder with a different message if something goes wrong
+        createDebugPlaceholder(svgFilePath);
+    }
+    
+    /**
+     * Parse an SVG path data string and convert to graphics operations
+     */
+    private void parseSvgPath(String pathData) {
+        graphicsHandler.newPath();
+        
+        // Tokenize the path data
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("[a-zA-Z]|[-+]?[0-9]*\\.?[0-9]+([eE][-+]?[0-9]+)?");
+        java.util.regex.Matcher matcher = pattern.matcher(pathData);
+        
+        String command = null;
+        double x = 0, y = 0;      // Current point
+        double x1, y1, x2, y2;    // Control points for curves
+        double startX = 0, startY = 0; // Starting point for closepath
+        
+        boolean relative = false;
+        java.util.List<Double> params = new java.util.ArrayList<>();
+        
+        while (matcher.find()) {
+            String token = matcher.group();
+            
+            // Check if it's a command
+            if (token.matches("[a-zA-Z]")) {
+                // Process previous command if we have one
+                if (command != null && !params.isEmpty()) {
+                    processSvgPathCommand(command, params, x, y, startX, startY);
+                    params.clear();
+                }
+                
+                command = token;
+                relative = Character.isLowerCase(command.charAt(0));
+            } else {
+                // It's a parameter, add to list
+                try {
+                    params.add(Double.parseDouble(token));
+                } catch (NumberFormatException e) {
+                    logger.warning("Invalid number in path data: " + token);
+                }
+            }
+        }
+        
+        // Process the last command
+        if (command != null && !params.isEmpty()) {
+            processSvgPathCommand(command, params, x, y, startX, startY);
+        }
+    }
+    
+    /**
+     * Process a single SVG path command with its parameters
+     */
+    private void processSvgPathCommand(String command, java.util.List<Double> params, double x, double y, double startX, double startY) {
+        char cmd = Character.toUpperCase(command.charAt(0));
+        boolean relative = Character.isLowerCase(command.charAt(0));
+        
+        switch (cmd) {
+            case 'M': // moveto
+                for (int i = 0; i < params.size(); i += 2) {
+                    if (i + 1 < params.size()) {
+                        double x1 = params.get(i);
+                        double y1 = params.get(i + 1);
+                        
+                        if (relative) {
+                            x1 += x;
+                            y1 += y;
+                        }
+                        
+                        if (i == 0) {
+                            graphicsHandler.moveTo(x1, y1);
+                            startX = x1;
+                            startY = y1;
+                        } else {
+                            graphicsHandler.lineTo(x1, y1);
+                        }
+                        
+                        x = x1;
+                        y = y1;
+                    }
+                }
+                break;
+                
+            case 'L': // lineto
+                for (int i = 0; i < params.size(); i += 2) {
+                    if (i + 1 < params.size()) {
+                        double x1 = params.get(i);
+                        double y1 = params.get(i + 1);
+                        
+                        if (relative) {
+                            x1 += x;
+                            y1 += y;
+                        }
+                        
+                        graphicsHandler.lineTo(x1, y1);
+                        x = x1;
+                        y = y1;
+                    }
+                }
+                break;
+                
+            case 'H': // horizontal lineto
+                for (int i = 0; i < params.size(); i++) {
+                    double x1 = params.get(i);
+                    if (relative) {
+                        x1 += x;
+                    }
+                    graphicsHandler.lineTo(x1, y);
+                    x = x1;
+                }
+                break;
+                
+            case 'V': // vertical lineto
+                for (int i = 0; i < params.size(); i++) {
+                    double y1 = params.get(i);
+                    if (relative) {
+                        y1 += y;
+                    }
+                    graphicsHandler.lineTo(x, y1);
+                    y = y1;
+                }
+                break;
+                
+            case 'C': // curveto
+                for (int i = 0; i < params.size(); i += 6) {
+                    if (i + 5 < params.size()) {
+                        double x1 = params.get(i);
+                        double y1 = params.get(i + 1);
+                        double x2 = params.get(i + 2);
+                        double y2 = params.get(i + 3);
+                        double x3 = params.get(i + 4);
+                        double y3 = params.get(i + 5);
+                        
+                        if (relative) {
+                            x1 += x;
+                            y1 += y;
+                            x2 += x;
+                            y2 += y;
+                            x3 += x;
+                            y3 += y;
+                        }
+                        
+                        graphicsHandler.curveTo(x1, y1, x2, y2, x3, y3);
+                        x = x3;
+                        y = y3;
+                    }
+                }
+                break;
+                
+            case 'Z': // closepath
+                graphicsHandler.closePath();
+                x = startX;
+                y = startY;
+                break;
+                
+            default:
+                logger.warning("Unsupported SVG path command: " + command);
+                break;
+        }
+    }
+    
+    /**
+     * Parse SVG color string to Color object
+     */
+    private Color parseSvgColor(String colorStr) {
+        try {
+            if (colorStr.startsWith("#")) {
+                // Hex color
+                return Color.decode(colorStr);
+            } else if (colorStr.startsWith("rgb(")) {
+                // RGB color
+                String[] parts = colorStr.substring(4, colorStr.length() - 1).split(",");
+                if (parts.length == 3) {
+                    int r = Integer.parseInt(parts[0].trim());
+                    int g = Integer.parseInt(parts[1].trim());
+                    int b = Integer.parseInt(parts[2].trim());
+                    return new Color(r, g, b);
+                }
+            } else {
+                // Named color
+                switch (colorStr.toLowerCase()) {
+                    case "black": return Color.BLACK;
+                    case "blue": return Color.BLUE;
+                    case "cyan": return Color.CYAN;
+                    case "gray": return Color.GRAY;
+                    case "green": return Color.GREEN;
+                    case "magenta": return Color.MAGENTA;
+                    case "red": return Color.RED;
+                    case "white": return Color.WHITE;
+                    case "yellow": return Color.YELLOW;
+                    default: 
+                        try {
+                            return (Color)Color.class.getField(colorStr.toUpperCase()).get(null);
+                        } catch (Exception e) {
+                            return Color.BLACK;
+                        }
+                }
+            }
+        } catch (Exception e) {
+            logger.warning("Error parsing color: " + colorStr + " - " + e.getMessage());
+        }
+        return Color.BLACK;
+    }
+    
+    /**
+     * Create a visual placeholder for debug purposes
+     */
+    private void createDebugPlaceholder(String svgFilePath) {
         try {
             // Get source file name 
             String sourceFileName = new File(svgFilePath).getName();
             
-            // Create a light gray rectangle
+            // Create a light blue rectangle (different color to indicate this is a fallback)
             graphicsHandler.newPath();
-            graphicsHandler.setRGBColorFill(0.9, 0.9, 0.9); // Light gray fill
-            graphicsHandler.setRGBColorStroke(0.5, 0.5, 0.5); // Gray border
+            graphicsHandler.setRGBColorFill(0.8, 0.9, 1.0); // Light blue fill
+            graphicsHandler.setRGBColorStroke(0.5, 0.5, 0.8); // Blue-gray border
             
             // Draw a placeholder rectangle
             double x = 0;
@@ -675,20 +1200,20 @@ public class BinaryEpsInterpreter {
             // Add text for binary EPS indicator
             graphicsHandler.beginText();
             graphicsHandler.setFont("Helvetica", 8);
-            graphicsHandler.setRGBColorFill(0.2, 0.2, 0.2); // Dark gray text
+            graphicsHandler.setRGBColorFill(0.2, 0.2, 0.5); // Dark blue text
             
-            // Add "Binary EPS File" text
+            // Add "SVG Import Failed" text
             graphicsHandler.moveText(x + 5, y + 10);
-            graphicsHandler.showText("Binary EPS File");
+            graphicsHandler.showText("SVG Import Failed");
             
             // Add the source file name
             graphicsHandler.moveText(x + 5, y + 18);
             graphicsHandler.showText(sourceFileName);
             graphicsHandler.endText();
             
-            logger.info("Added visual placeholder for binary EPS file");
+            logger.info("Added debug placeholder for failed SVG import");
         } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error creating placeholder for binary EPS: " + e.getMessage(), e);
+            logger.log(Level.SEVERE, "Error creating debug placeholder: " + e.getMessage(), e);
         }
     }
     
@@ -709,5 +1234,20 @@ public class BinaryEpsInterpreter {
             }
             dir.delete();
         }
+    }
+
+    private void initializeWithBBox(double llx, double lly, double urx, double ury) {
+        Point2D.Double ll = new Point2D.Double(llx, lly);
+        Point2D.Double ur = new Point2D.Double(urx, ury);
+        double width = urx - llx;
+        double height = ury - lly;
+        graphicsHandler.initialize(ll, ur, width, height);
+    }
+
+    private void initializeWithDefaults() {
+        Point2D.Double ll = new Point2D.Double(0, 0);
+        Point2D.Double ur = new Point2D.Double(100, 100);
+        graphicsHandler.initialize(ll, ur, 100, 100);
+        logger.warning("Using default BoundingBox 100x100");
     }
 } 

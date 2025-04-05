@@ -54,6 +54,20 @@
             <version>${batik.version}</version>
         </dependency>
 
+        <!-- Add Xalan for XML transformation -->
+        <dependency>
+            <groupId>xalan</groupId>
+            <artifactId>xalan</artifactId>
+            <version>2.7.3</version>
+        </dependency>
+        
+        <!-- Add XML Serializer -->
+        <dependency>
+            <groupId>xalan</groupId>
+            <artifactId>serializer</artifactId>
+            <version>2.7.3</version>
+        </dependency>
+
         <!-- Other dependencies if any -->
         <!-- Example: JUnit for testing (if you add tests later) -->
         <!--
@@ -80,8 +94,8 @@
                 <configuration>
                     <mainClass>com.convert2web.App</mainClass>
                     <arguments>
-                        <argument>test/test_images/v1658963.eps</argument>
-                        <argument>test/output/v1658963.svg</argument>
+                        <argument>test/test_images/manufactured_by.eps</argument>
+                        <argument>test/output/manufactured_by.svg</argument>
                     </arguments>
                 </configuration>
             </plugin>

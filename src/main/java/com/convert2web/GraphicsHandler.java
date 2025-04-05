@@ -3,6 +3,7 @@ package com.convert2web;
 import java.awt.Color;
 import java.awt.geom.AffineTransform;
 import java.io.IOException;
+import java.awt.geom.Point2D;
 
 /**
  * Interface defining the graphical operations required by the EpsInterpreter.
@@ -11,7 +12,7 @@ import java.io.IOException;
 public interface GraphicsHandler {
 
     // --- Document/Output ---
-    void initialize(double llx, double lly, double urx, double ury);
+    void initialize(Point2D.Double ll, Point2D.Double ur, double width, double height);
     void writeToFile(String outputPath) throws Exception; // Finalize and write output
 
     // --- Path Construction ---
@@ -66,4 +67,17 @@ public interface GraphicsHandler {
 
     void setRGBColor(double r, double g, double b);
     void clip(boolean useEvenOddRule);
+    
+    /**
+     * Creates a rectangular clipping path
+     * @param x X-coordinate of the rectangle's top-left corner
+     * @param y Y-coordinate of the rectangle's top-left corner
+     * @param width Width of the rectangle
+     * @param height Height of the rectangle
+     */
+    void rectclip(double x, double y, double width, double height);
+    
+    AffineTransform getCurrentTransform();
+    
+    void setTransform(AffineTransform transform);
 } 
