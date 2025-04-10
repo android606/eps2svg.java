@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Define test suite ID
+TEST_SUITE_ID="TS02"
+
 # Test binary EPS file handling
 # This script tests that the tool can handle binary EPS files correctly.
 
@@ -53,7 +56,7 @@ for binary_file in "${binary_files[@]}"; do
     fi
     
     # Check normal conversion
-    output_file="$TEST_DIR/output/test_binary/${base_name}_normal.svg"
+    output_file="$OUTPUT_DIR/${base_name}_normal.svg"
     print_test_line "Normal conversion of $binary_file" | tee -a "$LOG_FILE"
     TOTAL_TESTS=$((TOTAL_TESTS+1))
     
@@ -67,7 +70,7 @@ for binary_file in "${binary_files[@]}"; do
     fi
     
     # Check GhostScript conversion
-    output_file="$TEST_DIR/output/test_binary/${base_name}_ghostscript.svg"
+    output_file="$OUTPUT_DIR/${base_name}_gs.svg"
     print_test_line "GhostScript conversion of $binary_file" | tee -a "$LOG_FILE"
     TOTAL_TESTS=$((TOTAL_TESTS+1))
     
@@ -81,7 +84,7 @@ for binary_file in "${binary_files[@]}"; do
     fi
     
     # Check TIFF preview conversion
-    output_file="$TEST_DIR/output/test_binary/${base_name}_tiff.svg"
+    output_file="$OUTPUT_DIR/${base_name}_tiff.svg"
     print_test_line "TIFF preview conversion of $binary_file" | tee -a "$LOG_FILE"
     TOTAL_TESTS=$((TOTAL_TESTS+1))
     

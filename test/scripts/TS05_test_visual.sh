@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Define test suite ID
+TEST_SUITE_ID="TS05"
+
 # Test visual output
 # This script tests that the tool produces visually correct SVG output.
 

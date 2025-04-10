@@ -1,0 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+When opening an SVG file for the user to view, don't use the system default viewer. Instead, open the SVG in a Cursor editor and the user will view it with the SVG Previewer plugin.

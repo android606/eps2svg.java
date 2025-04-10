@@ -1,0 +1,133 @@
+%!PS-Adobe-3.0 EPSF-3.0
+%%Creator: Convert2Web Test Pattern
+%%CreationDate: 2023-04-04
+%%Pages: 1
+%%DocumentData: Clean7Bit
+%%LanguageLevel: 2
+%%BoundingBox: 0 0 200 200
+%%EndComments
+%%BeginProlog
+save
+50 dict begin
+/q { gsave } bind def
+/Q { grestore } bind def
+/m { moveto } bind def
+/l { lineto } bind def
+/c { curveto } bind def
+/h { closepath } bind def
+/S { stroke } bind def
+/f { fill } bind def
+/W { clip } bind def
+/W* { eoclip } bind def
+/n { newpath } bind def
+%%EndProlog
+%%BeginSetup
+%%EndSetup
+%%Page: 1 1
+%%BeginPageSetup
+%%PageBoundingBox: 0 0 200 200
+%%EndPageSetup
+
+% Set line width for all strokes
+1 setlinewidth
+
+% Regular curve example (easy to see)
+newpath
+50 50 moveto
+50 150 150 150 150 50 curveto
+stroke
+
+% Subtle curve example (slightly subtle)
+newpath
+50 100 moveto
+51 101 149 101 150 100 curveto
+stroke
+
+% Very subtle curve example (very subtle)
+newpath
+50 140 moveto
+50.5 140.5 149.5 140.5 150 140 curveto
+stroke
+
+% Red color for caution.eps curve examples
+1 0 0 setrgbcolor
+
+% Exclamation point circle from caution.eps
+newpath
+51 101 2 0 360 arc
+fill
+
+newpath
+149 101 2 0 360 arc
+fill
+
+% Very subtle curve from caution.eps (small circle)
+0 0 1 setrgbcolor
+newpath
+50.5 140.5 1 0 360 arc
+fill
+
+newpath
+149.5 140.5 1 0 360 arc
+fill
+
+% Extract from caution.eps - the exclamation point dot
+0 0 0 setrgbcolor
+/Helvetica findfont
+10 scalefont
+setfont
+50 30 moveto
+(Regular Curve) show
+50 80 moveto
+(Subtle Curve) show
+50 120 moveto
+(Very Subtle Curve) show
+
+% Exact curve from caution.eps - exclamation point outline
+1 0 0 setrgbcolor
+newpath
+% This is a curve sequence extracted from caution.eps exclamation point
+80 180 moveto
+80 180.5 moveto 79.5 181.5 79 181.5 curveto
+78.5 181.5 78 181.0 78 180.5 curveto
+78 180.0 78.5 179.5 79 179.5 curveto
+79.5 179.5 80 180.0 80 180.5 curveto
+closepath
+fill
+
+% Another caution.eps curve - the top triangle part
+newpath
+120 180 moveto
+110 160 lineto
+130 160 lineto
+closepath
+fill
+
+% Exact copy of exclamation mark circle from caution.eps
+0 0 0 setrgbcolor
+newpath
+90 40 moveto
+90 45 moveto
+90 45.585 89.523 46.059 88.94 46.059 curveto
+88.354 46.059 87.887 45.585 87.887 45 curveto
+87.887 44.419 88.354 43.95 88.94 43.95 curveto
+89.523 43.95 90 44.419 90 45 curveto
+closepath
+fill
+
+% Direct copy of caution triangle with subtle curves (scaled up)
+0 0 0 setrgbcolor
+newpath
+140 40 moveto
+% Top triangle with subtle curves
+119.754 22.098 moveto 101.719 22.098 lineto 101.621 22.098 101.539 22.18 101.539 22.27 curveto 101.539 
+22.301 101.547 22.332 101.566 22.363 curveto 110.582 38.313 lineto 110.613 38.367 110.668 38.406
+110.734 38.406 curveto 110.797 38.406 110.859 38.367 110.887 38.313 curveto 119.906 22.363
+lineto 119.918 22.332 119.93 22.301 119.93 22.27 curveto 119.93 22.18 119.852 22.098 119.754 
+22.098 curveto
+fill
+
+showpage
+%%Trailer
+end restore
+%%EOF 

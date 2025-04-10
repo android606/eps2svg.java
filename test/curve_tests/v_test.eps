@@ -1,0 +1,70 @@
+%!PS-Adobe-3.0 EPSF-3.0
+%%BoundingBox: 0 0 200 200
+%%Pages: 1
+%%EndComments
+
+% Test file for 'v' operator
+% The 'v' operator creates a curve using the current point as the first control point
+% Syntax: x2 y2 x3 y3 v (where current point is x1,y1)
+
+% Set line width and colors
+1 setlinewidth
+0 0 0 setrgbcolor
+
+% Draw a curve using the 'v' operator
+newpath
+50 100 moveto  % This point becomes the implicit first control point
+80 150 150 100 v  % Second control point (80,150) and endpoint (150,100)
+stroke
+
+% For comparison, draw a similar curve using the regular curveto
+newpath
+50 50 moveto
+50 50 80 0 150 50 curveto  % Note the first control point is the same as current point
+stroke
+
+% Draw control points for illustration
+0 1 0 setrgbcolor  % Green for control points
+newpath
+50 100 2 0 360 arc fill   % First control point for v curve (same as start point)
+80 150 2 0 360 arc fill   % Second control point for v curve
+
+1 0 0 setrgbcolor  % Red for control points
+newpath
+50 50 2 0 360 arc fill    % First control point for curveto curve (same as start point)
+80 0 2 0 360 arc fill     % Second control point for curveto curve
+
+% Draw endpoints
+0 0 1 setrgbcolor  % Blue for endpoints
+newpath
+50 100 3 0 360 arc fill   % Starting point of v curve
+150 100 3 0 360 arc fill  % End point of v curve
+50 50 3 0 360 arc fill    % Starting point of curveto curve
+150 50 3 0 360 arc fill   % End point of curveto curve
+
+% Draw lines connecting control points
+0.5 setgray
+newpath
+50 100 moveto  % Start at first control point (v curve)
+80 150 lineto   % Line to second control point (v curve)
+150 100 lineto  % Line to endpoint (v curve)
+stroke
+
+newpath
+50 50 moveto   % Start at first control point (curveto curve)
+80 0 lineto    % Line to second control point (curveto curve)
+150 50 lineto  % Line to endpoint (curveto curve)
+stroke
+
+% Add labels
+/Helvetica findfont 8 scalefont setfont
+0 0 0 setrgbcolor  % Black for text
+
+45 110 moveto (Start/CP1) show
+80 160 moveto (CP2) show
+150 110 moveto (End) show
+60 30 moveto (Regular curveto) show
+60 120 moveto (v operator) show
+
+showpage
+%%EOF 

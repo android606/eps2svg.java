@@ -1,0 +1,85 @@
+%!PS-Adobe-3.0 EPSF-3.0
+%%BoundingBox: 0 0 200 200
+%%Pages: 1
+%%EndComments
+
+% Test file for 'arct' operator
+% The 'arct' operator creates a tangent arc between two lines
+% Syntax: x1 y1 x2 y2 r arct
+% This draws an arc of radius r tangent to the lines (current point to x1,y1) and (x1,y1 to x2,y2)
+
+% Set line width and colors
+1 setlinewidth
+0 0 0 setrgbcolor
+
+% Example 1: 90-degree corner with rounded edges
+newpath
+50 50 moveto       % Starting point
+50 100 100 100 10 arct  % Round the corner with a 10-unit radius
+100 100 lineto    % Complete the path
+stroke
+
+% Example 2: Different radius
+newpath
+50 150 moveto       % Starting point
+50 120 100 120 20 arct  % Round the corner with a 20-unit radius
+100 120 lineto    % Complete the path
+stroke
+
+% Example 3: Multiple arct corners to create a rounded rectangle
+0 0 1 setrgbcolor  % Blue
+newpath
+120 50 moveto       % Starting point
+170 50 lineto      % Bottom edge
+170 50 170 100 10 arct  % Bottom-right corner
+170 100 lineto     % Right edge
+170 100 120 100 10 arct  % Top-right corner
+120 100 lineto     % Top edge
+120 100 120 50 10 arct   % Top-left corner
+stroke
+
+% Example 4: Acute angle with rounded corner
+1 0 0 setrgbcolor  % Red
+newpath
+120 150 moveto     % Starting point
+150 120 170 150 15 arct  % Round the acute angle with a 15-unit radius
+170 150 lineto     % Complete the path
+stroke
+
+% Example 5: Obtuse angle with rounded corner
+0 1 0 setrgbcolor  % Green
+newpath
+120 180 moveto     % Starting point
+140 170 120 140 8 arct   % Round the obtuse angle with a 8-unit radius
+120 140 lineto     % Complete the path
+stroke
+
+% Mark the tangent points and centers for Example 1
+0.7 setgray
+newpath
+50 90 2 0 360 arc fill  % First tangent point
+90 100 2 0 360 arc fill % Second tangent point
+80 90 2 0 360 arc fill  % Center of the arc
+
+% Add dotted lines to show the original sharp corner for Example 1
+[2 2] 0 setdash
+newpath
+50 50 moveto
+50 100 lineto
+100 100 lineto
+stroke
+[] 0 setdash
+
+% Add labels
+/Helvetica findfont 8 scalefont setfont
+0 0 0 setrgbcolor  % Black for text
+
+55 70 moveto (r=10) show
+55 135 moveto (r=20) show
+140 75 moveto (Rounded rectangle) show
+150 130 moveto (Acute angle) show
+130 160 moveto (Obtuse angle) show
+75 30 moveto (arct operator test) show
+
+showpage
+%%EOF 

@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Define test suite ID
+TEST_SUITE_ID="TS01"
+
 # Test basic conversion functionality
 # This script tests that the tool can convert simple EPS files to SVG, and checks the validity of the output.
 

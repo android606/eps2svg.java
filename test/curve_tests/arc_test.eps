@@ -1,0 +1,91 @@
+%!PS-Adobe-3.0 EPSF-3.0
+%%BoundingBox: 0 0 200 200
+%%Pages: 1
+%%EndComments
+
+% Test file for 'arc' operator
+% The 'arc' operator creates a circular arc
+% Syntax: x y r start_angle end_angle arc
+
+% Set line width and colors
+1 setlinewidth
+0 0 0 setrgbcolor
+
+% Draw a full circle using the arc operator
+newpath
+100 100 40 0 360 arc
+stroke
+
+% Draw a 90-degree arc
+newpath
+100 100 30 0 90 arc
+stroke
+
+% Draw a 180-degree arc
+newpath
+100 100 20 0 180 arc
+stroke
+
+% Draw a 270-degree arc
+newpath
+100 100 10 0 270 arc
+stroke
+
+% Draw arcs with different starting angles
+% 45-degree arc starting at 45 degrees
+0 0 1 setrgbcolor  % Blue for this arc
+newpath
+100 100 50 45 90 arc
+stroke
+
+% 90-degree arc starting at 135 degrees
+1 0 0 setrgbcolor  % Red for this arc
+newpath
+100 100 50 135 225 arc
+stroke
+
+% 90-degree arc starting at 270 degrees
+0 1 0 setrgbcolor  % Green for this arc
+newpath
+100 100 50 270 360 arc
+stroke
+
+% Mark the center point
+0 0 0 setrgbcolor  % Black
+newpath
+100 100 2 0 360 arc fill
+
+% Add radius lines to show angles
+0.7 setgray
+newpath
+100 100 moveto
+140 100 lineto  % 0 degrees
+stroke
+
+newpath
+100 100 moveto
+100 140 lineto  % 90 degrees
+stroke
+
+newpath
+100 100 moveto
+60 100 lineto   % 180 degrees
+stroke
+
+newpath
+100 100 moveto
+100 60 lineto   % 270 degrees
+stroke
+
+% Add labels
+/Helvetica findfont 8 scalefont setfont
+0 0 0 setrgbcolor  % Black for text
+
+142 100 moveto (0°) show
+102 142 moveto (90°) show
+50 100 moveto (180°) show
+92 58 moveto (270°) show
+100 30 moveto (arc operator test) show
+
+showpage
+%%EOF 

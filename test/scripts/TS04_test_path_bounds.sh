@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Define test suite ID
+TEST_SUITE_ID="TS04"
+
 # Test path bounds handling
 # This script tests that the tool correctly handles path bounds and transformations.
 

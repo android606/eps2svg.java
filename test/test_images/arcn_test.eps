@@ -1,0 +1,105 @@
+%!PS-Adobe-3.0 EPSF-3.0
+%%BoundingBox: 0 0 200 200
+%%Pages: 1
+%%EndComments
+
+% Test file for 'arcn' operator
+% The 'arcn' operator creates a circular arc in the counterclockwise direction
+% Syntax: x y r start_angle end_angle arcn
+% Note: arcn draws in the opposite direction from arc
+
+% Set line width and colors
+1 setlinewidth
+0 0 0 setrgbcolor
+
+% Draw a full circle using the arcn operator
+newpath
+100 100 40 0 0 arcn  % Start and end at 0 degrees, go full circle counterclockwise
+stroke
+
+% Draw a 90-degree arcn (counterclockwise from 90 to 0 degrees)
+newpath
+100 100 30 90 0 arcn
+stroke
+
+% Draw a 180-degree arcn (counterclockwise from 180 to 0 degrees)
+newpath
+100 100 20 180 0 arcn
+stroke
+
+% Draw a 270-degree arcn (counterclockwise from 270 to 0 degrees)
+newpath
+100 100 10 270 0 arcn
+stroke
+
+% Draw arcs with different starting angles
+% 45-degree arc starting at 90 degrees (counterclockwise to 45 degrees)
+0 0 1 setrgbcolor  % Blue for this arc
+newpath
+100 100 50 90 45 arcn
+stroke
+
+% 90-degree arc starting at 225 degrees (counterclockwise to 135 degrees)
+1 0 0 setrgbcolor  % Red for this arc
+newpath
+100 100 50 225 135 arcn
+stroke
+
+% 90-degree arc starting at 360 degrees (counterclockwise to 270 degrees)
+0 1 0 setrgbcolor  % Green for this arc
+newpath
+100 100 50 360 270 arcn
+stroke
+
+% For comparison, draw one arc using both arc and arcn
+0.5 0 0.5 setrgbcolor  % Purple
+newpath
+150 150 20 0 90 arc  % Clockwise from 0 to 90 degrees
+stroke
+
+0 0.5 0.5 setrgbcolor  % Teal
+newpath
+150 150 15 90 0 arcn  % Counterclockwise from 90 to 0 degrees
+stroke
+
+% Mark the center points
+0 0 0 setrgbcolor  % Black
+newpath
+100 100 2 0 360 arc fill
+150 150 2 0 360 arc fill
+
+% Add radius lines to show angles
+0.7 setgray
+newpath
+100 100 moveto
+140 100 lineto  % 0 degrees
+stroke
+
+newpath
+100 100 moveto
+100 140 lineto  % 90 degrees
+stroke
+
+newpath
+100 100 moveto
+60 100 lineto   % 180 degrees
+stroke
+
+newpath
+100 100 moveto
+100 60 lineto   % 270 degrees
+stroke
+
+% Add labels
+/Helvetica findfont 8 scalefont setfont
+0 0 0 setrgbcolor  % Black for text
+
+142 100 moveto (0°) show
+102 142 moveto (90°) show
+50 100 moveto (180°) show
+92 58 moveto (270°) show
+100 30 moveto (arcn operator test) show
+150 130 moveto (arc vs arcn) show
+
+showpage
+%%EOF 

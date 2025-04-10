@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Define test suite ID
+TEST_SUITE_ID="TS03"
+
 # Test viewbox handling
 # This script tests that the tool correctly handles viewbox and dimensions.
 

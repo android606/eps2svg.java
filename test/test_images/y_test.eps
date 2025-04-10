@@ -1,0 +1,71 @@
+%!PS-Adobe-3.0 EPSF-3.0
+%%BoundingBox: 0 0 200 200
+%%Pages: 1
+%%EndComments
+
+% Test file for 'y' operator
+% The 'y' operator creates a curve using the endpoint as the second control point
+% Syntax: x1 y1 x3 y3 y (where x2,y2 = x3,y3)
+
+% Set line width and colors
+1 setlinewidth
+0 0 0 setrgbcolor
+
+% Draw a curve using the 'y' operator
+newpath
+50 100 moveto  % Starting point
+100 150 150 100 y  % First control point (100,150) and endpoint (150,100) 
+                   % The endpoint is also used as the second control point
+stroke
+
+% For comparison, draw a similar curve using the regular curveto
+newpath
+50 50 moveto
+100 0 150 50 150 50 curveto  % Note the second control point is the same as the endpoint
+stroke
+
+% Draw control points for illustration
+0 1 0 setrgbcolor  % Green for control points (y curve)
+newpath
+100 150 2 0 360 arc fill   % First control point for y curve
+150 100 2 0 360 arc fill   % Second control point for y curve (same as endpoint)
+
+1 0 0 setrgbcolor  % Red for control points (curveto curve)
+newpath
+100 0 2 0 360 arc fill     % First control point for curveto curve
+150 50 2 0 360 arc fill    % Second control point for curveto curve (same as endpoint)
+
+% Draw endpoints
+0 0 1 setrgbcolor  % Blue for endpoints
+newpath
+50 100 3 0 360 arc fill    % Starting point of y curve
+150 100 3 0 360 arc fill   % End point of y curve
+50 50 3 0 360 arc fill     % Starting point of curveto curve
+150 50 3 0 360 arc fill    % End point of curveto curve
+
+% Draw lines connecting control points
+0.5 setgray
+newpath
+50 100 moveto   % Start point (y curve)
+100 150 lineto  % Line to first control point (y curve)
+150 100 lineto  % Line to second control point/endpoint (y curve)
+stroke
+
+newpath
+50 50 moveto    % Start point (curveto curve)
+100 0 lineto    % Line to first control point (curveto curve)
+150 50 lineto   % Line to second control point/endpoint (curveto curve)
+stroke
+
+% Add labels
+/Helvetica findfont 8 scalefont setfont
+0 0 0 setrgbcolor  % Black for text
+
+45 110 moveto (Start) show
+100 160 moveto (CP1) show
+155 110 moveto (End/CP2) show
+60 30 moveto (Regular curveto) show
+60 120 moveto (y operator) show
+
+showpage
+%%EOF 

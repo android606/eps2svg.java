@@ -1,0 +1,56 @@
+%!PS-Adobe-3.0 EPSF-3.0
+%%BoundingBox: 0 0 200 200
+%%Pages: 1
+%%EndComments
+
+% Test file for curveto operator (c)
+% This example shows a simple cubic bezier curve using both the full 'curveto' operator
+% and the shorthand 'c' operator
+
+% Set line width and colors
+1 setlinewidth
+0 0 0 setrgbcolor
+
+% First curve using the full 'curveto' operator
+newpath
+50 50 moveto
+70 120 130 120 150 50 curveto
+stroke
+
+% Second curve using the abbreviated 'c' operator
+newpath
+50 150 moveto
+70 80 130 80 150 150 c
+stroke
+
+% Draw control points for illustration
+0 1 0 setrgbcolor  % Green for control points
+newpath
+70 120 2 0 360 arc fill   % First control point for first curve
+130 120 2 0 360 arc fill  % Second control point for first curve
+
+1 0 0 setrgbcolor  % Red for control points
+newpath
+70 80 2 0 360 arc fill    % First control point for second curve
+130 80 2 0 360 arc fill   % Second control point for second curve
+
+% Draw endpoints
+0 0 1 setrgbcolor  % Blue for endpoints
+newpath
+50 50 3 0 360 arc fill    % Starting point of first curve
+150 50 3 0 360 arc fill   % End point of first curve
+50 150 3 0 360 arc fill   % Starting point of second curve
+150 150 3 0 360 arc fill  % End point of second curve
+
+% Add labels
+/Helvetica findfont 8 scalefont setfont
+0 0 0 setrgbcolor  % Black for text
+
+50 40 moveto (Start) show
+150 40 moveto (End) show
+75 120 moveto (Control 1) show
+125 120 moveto (Control 2) show
+60 155 moveto (curveto test) show
+
+showpage
+%%EOF 

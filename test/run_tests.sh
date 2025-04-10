@@ -19,7 +19,11 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Make all test scripts executable
-chmod +x "$TEST_DIR/scripts/test_*.sh"
+for test_script in "$TEST_DIR/scripts/test_"*.sh; do
+    if [ -f "$test_script" ]; then
+        chmod +x "$test_script"
+    fi
+done
 
 # Count tests and failures
 TOTAL_SUITES=0
@@ -31,18 +35,24 @@ echo -e "${BLUE}==========================================${NC}" | tee -a "$MAST
 
 # Define test suites with their IDs and names
 declare -A TEST_SUITE_NAMES
-TEST_SUITE_NAMES["test_setup.sh"]="Test Setup"
-TEST_SUITE_NAMES["test_basic_conversion.sh"]="Basic Conversion"
-TEST_SUITE_NAMES["test_binary_eps.sh"]="Binary EPS Support"
-TEST_SUITE_NAMES["test_viewbox.sh"]="ViewBox Correctness"
-TEST_SUITE_NAMES["test_path_bounds.sh"]="Path Boundaries"
-TEST_SUITE_NAMES["test_visual.sh"]="Visual Quality"
+TEST_SUITE_NAMES["TS00_test_setup.sh"]="Test Setup"
+TEST_SUITE_NAMES["TS01_test_basic_conversion.sh"]="Basic Conversion"
+TEST_SUITE_NAMES["TS02_test_binary_eps.sh"]="Binary EPS Support"
+TEST_SUITE_NAMES["TS03_test_viewbox.sh"]="ViewBox Correctness"
+TEST_SUITE_NAMES["TS04_test_path_bounds.sh"]="Path Boundaries"
+TEST_SUITE_NAMES["TS05_test_visual.sh"]="Visual Quality"
+TEST_SUITE_NAMES["TS06_test_curve_operators.sh"]="Curve Operators"
+TEST_SUITE_NAMES["TS07_test_curve_preservation.sh"]="Curve Preservation"
+TEST_SUITE_NAMES["TS08_test_subtle_curves.sh"]="Subtle Curves"
+TEST_SUITE_NAMES["TS09_test_fix_caution_curve.sh"]="Caution Curve Fix"
+TEST_SUITE_NAMES["TS15_test_negative_y_curves_regression.sh"]="Negative Y Curves Regression"
+# TEST_SUITE_NAMES["TS14_test_regression_example.sh"]="Regression Example" # Deliberately commented out as this is just an example of the correct test script format
 
 # Function to run a test script and track results
 run_test_suite() {
     local test_script=$1
     local script_name=$(basename "$test_script")
-    local ts_id="${TEST_SUITE_IDS[$script_name]:-TSXX}"
+    local ts_id="${script_name:0:4}"
     local test_name="${TEST_SUITE_NAMES[$script_name]:-Unknown Test}"
     
     echo -e "\n-----------------------------------------" | tee -a "$MASTER_LOG"
@@ -67,7 +77,7 @@ run_test_suite() {
 }
 
 # First run the setup script
-run_test_suite "$TEST_DIR/scripts/test_setup.sh"
+run_test_suite "$TEST_DIR/scripts/TS00_test_setup.sh"
 SETUP_RESULT=$?
 
 # Only continue with other tests if setup was successful or had only warnings about specific files
@@ -81,16 +91,22 @@ if [ $SETUP_RESULT -eq 0 ] || [ $SETUP_RESULT -eq 1 ]; then
     fi
     
     # Run each test suite
-    run_test_suite "$TEST_DIR/scripts/test_basic_conversion.sh"
-    run_test_suite "$TEST_DIR/scripts/test_binary_eps.sh"
-    run_test_suite "$TEST_DIR/scripts/test_viewbox.sh"
-    run_test_suite "$TEST_DIR/scripts/test_path_bounds.sh"
-    run_test_suite "$TEST_DIR/scripts/test_visual.sh"
+    run_test_suite "$TEST_DIR/scripts/TS01_test_basic_conversion.sh"
+    run_test_suite "$TEST_DIR/scripts/TS02_test_binary_eps.sh"
+    run_test_suite "$TEST_DIR/scripts/TS03_test_viewbox.sh"
+    run_test_suite "$TEST_DIR/scripts/TS04_test_path_bounds.sh"
+    run_test_suite "$TEST_DIR/scripts/TS05_test_visual.sh"
+    run_test_suite "$TEST_DIR/scripts/TS06_test_curve_operators.sh"
+    run_test_suite "$TEST_DIR/scripts/TS07_test_curve_preservation.sh"
+    run_test_suite "$TEST_DIR/scripts/TS08_test_subtle_curves.sh"
+    run_test_suite "$TEST_DIR/scripts/TS09_test_fix_caution_curve.sh"
+    run_test_suite "$TEST_DIR/scripts/TS15_test_negative_y_curves_regression.sh"
+    # run_test_suite "$TEST_DIR/scripts/TS14_test_regression_example.sh" # Deliberately commented out as this is just an example of the correct test script format
 else
     echo -e "\n${RED}✗ Setup failed critically. Skipping remaining tests.${NC}" | tee -a "$MASTER_LOG"
     # Count remaining suites as failed for summary
-    TOTAL_SUITES=$((TOTAL_SUITES+5))
-    FAILED_SUITES=$((FAILED_SUITES+5))
+    TOTAL_SUITES=$((TOTAL_SUITES+10))
+    FAILED_SUITES=$((FAILED_SUITES+10))
 fi
 
 # Summary

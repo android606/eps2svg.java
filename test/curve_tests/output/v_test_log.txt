@@ -1,0 +1,937 @@
+Apr 04, 2025 2:39:20 PM com.convert2web.EpsToSvgConverter <init>
+INFO: EPS to SVG Converter initialized
+Apr 04, 2025 2:39:20 PM com.convert2web.EpsToSvgConverter convert
+INFO: Starting conversion of C:/dev/convert2web/test/curve_tests/v_test.eps to C:/dev/convert2web/test/curve_tests/output/v_test.svg
+Apr 04, 2025 2:39:20 PM com.convert2web.EpsToSvgConverter convert
+INFO: EPS file detected as: standard
+Apr 04, 2025 2:39:20 PM com.convert2web.EpsInterpreter processEps
+INFO: Starting EPS interpretation for: C:/dev/convert2web/test/curve_tests/v_test.eps
+Apr 04, 2025 2:39:20 PM com.convert2web.BatikGraphicsHandler initializeLogic
+INFO: Initializing BatikGraphicsHandler with BBox: ll=(0,0), ur=(200,200), width=200, height=200
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler initializeLogic
+INFO: Initial svgGenerator transform set to: AffineTransform[[1.0, 0.0, -0.0], [0.0, 1.0, -0.0]]
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler initialize
+INFO: Graphics handler initialized with bounds: Point2D.Double[0.0, 0.0] to Point2D.Double[200.0, 200.0]
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 1
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: setlinewidth
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: setrgbcolor
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: setrgbcolor
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: newpath
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 100
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: moveto
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: moveto
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (50, 100), SegmentCount=1
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 80
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 150
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 150
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 100
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: v
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: v
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$5
+INFO: Executing v: currentPoint=(50, 100), control2=(80, 150), end=(150, 100)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(50,100), (80,150), End=(150,100)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (50, 100), (80, 150), (150, 100), SegmentCount=2
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: stroke
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: stroke
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Stroke method called - attempting to create path
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Current path bounds: 50.0,100.0 [100.0x50.0]
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler logPathDetails
+INFO: Path details: 1 moves, 0 lines, 0 quad curves, 1 cubic curves, 0 closes)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Generating path data from iterator
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path segment 1: MOVETO 50.0,100.0
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path segment 2: CUBICTO (50.0,100.0), (80.0,150.0), (150.0,100.0)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Creating SVG path element with data: M 50.0 100.0 C 50.0 100.0 80.0 150.0 150.0 100.0 
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path element added to SVG document with ID: path-1743802761889-0
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler newPath
+WARNING: newPath called with non-empty path - potential drawing loss. Path bounds: java.awt.geom.Rectangle2D$Double[x=50.0,y=100.0,w=100.0,h=50.0]
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: newpath
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: moveto
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: moveto
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (50, 50), SegmentCount=1
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 80
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 150
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: curveto
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: curveto
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$4
+INFO: Executing curveto: control1=(50, 50), control2=(80, 0), end=(150, 50)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(50,50), (80,0), End=(150,50)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (50, 50), (80, 0), (150, 50), SegmentCount=2
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: stroke
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: stroke
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Stroke method called - attempting to create path
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Current path bounds: 50.0,0.0 [100.0x50.0]
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler logPathDetails
+INFO: Path details: 1 moves, 0 lines, 0 quad curves, 1 cubic curves, 0 closes)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Generating path data from iterator
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path segment 1: MOVETO 50.0,50.0
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path segment 2: CUBICTO (50.0,50.0), (80.0,0.0), (150.0,50.0)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Creating SVG path element with data: M 50.0 50.0 C 50.0 50.0 80.0 0.0 150.0 50.0 
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path element added to SVG document with ID: path-1743802761922-1
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler newPath
+WARNING: newPath called with non-empty path - potential drawing loss. Path bounds: java.awt.geom.Rectangle2D$Double[x=50.0,y=0.0,w=100.0,h=50.0]
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 1
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: setrgbcolor
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: setrgbcolor
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: newpath
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 100
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 2
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 360
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: arc
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: arc
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: No current point, moving to start of arc (52, 100)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (52, 100), SegmentCount=1
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: Drawing arc from 0 to 360 degrees, 4 segments
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(52,101.105), (51.105,102), End=(50,102)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (52, 101.105), (51.105, 102), (50, 102), SegmentCount=2
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(48.895,102), (48,101.105), End=(48,100)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (48.895, 102), (48, 101.105), (48, 100), SegmentCount=3
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(48,98.895), (48.895,98), End=(50,98)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (48, 98.895), (48.895, 98), (50, 98), SegmentCount=4
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(51.105,98), (52,98.895), End=(52,100)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (51.105, 98), (52, 98.895), (52, 100), SegmentCount=5
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: fill
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: fill
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Fill method called - attempting to create path
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Current path bounds: 48.0,98.0 [4.0x4.0]
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler logPathDetails
+INFO: Path details: 1 moves, 0 lines, 0 quad curves, 4 cubic curves, 0 closes)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Generating path data from iterator
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: MOVETO 52.0,100.0
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 52.0,101.10457, 51.10457,102.0, 50.0,102.0
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 48.89543,102.0, 48.0,101.10457, 48.0,100.0
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 48.0,98.89543, 48.89543,98.0, 50.0,98.0
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 51.10457,98.0, 52.0,98.89543, 52.0,100.0
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Automatically closing path for fill operation
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Creating SVG path element with data: M 52.0 100.0 C 52.0 101.1 51.1 102.0 50.0 102.0 C 48.9 102.0 48.0 101.1 48.0 100.0 C 48.0 98.9 48.9 98.0 50.0 98.0 C 51.1 98.0 52.0 98.9 52.0 100.0 Z
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path element added to SVG document with ID: path-1743802761955-0
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler newPath
+WARNING: newPath called with non-empty path - potential drawing loss. Path bounds: java.awt.geom.Rectangle2D$Double[x=48.0,y=98.0,w=4.0,h=4.0]
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 80
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 150
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 2
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 360
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: arc
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: arc
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: No current point, moving to start of arc (82, 150)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (82, 150), SegmentCount=1
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: Drawing arc from 0 to 360 degrees, 4 segments
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(82,151.105), (81.105,152), End=(80,152)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (82, 151.105), (81.105, 152), (80, 152), SegmentCount=2
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(78.895,152), (78,151.105), End=(78,150)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (78.895, 152), (78, 151.105), (78, 150), SegmentCount=3
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(78,148.895), (78.895,148), End=(80,148)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (78, 148.895), (78.895, 148), (80, 148), SegmentCount=4
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(81.105,148), (82,148.895), End=(82,150)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (81.105, 148), (82, 148.895), (82, 150), SegmentCount=5
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: fill
+Apr 04, 2025 2:39:21 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: fill
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Fill method called - attempting to create path
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Current path bounds: 78.0,148.0 [4.0x4.0]
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler logPathDetails
+INFO: Path details: 1 moves, 0 lines, 0 quad curves, 4 cubic curves, 0 closes)
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Generating path data from iterator
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: MOVETO 82.0,150.0
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 82.0,151.10457, 81.10457,152.0, 80.0,152.0
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 78.89543,152.0, 78.0,151.10457, 78.0,150.0
+Apr 04, 2025 2:39:21 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 78.0,148.89543, 78.89543,148.0, 80.0,148.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 81.10457,148.0, 82.0,148.89543, 82.0,150.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Automatically closing path for fill operation
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Creating SVG path element with data: M 82.0 150.0 C 82.0 151.1 81.1 152.0 80.0 152.0 C 78.9 152.0 78.0 151.1 78.0 150.0 C 78.0 148.9 78.9 148.0 80.0 148.0 C 81.1 148.0 82.0 148.9 82.0 150.0 Z
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path element added to SVG document with ID: path-1743802762001-1
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler newPath
+WARNING: newPath called with non-empty path - potential drawing loss. Path bounds: java.awt.geom.Rectangle2D$Double[x=78.0,y=148.0,w=4.0,h=4.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: setrgbcolor
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: setrgbcolor
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: newpath
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 2
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 360
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: arc
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: arc
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: No current point, moving to start of arc (52, 50)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (52, 50), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: Drawing arc from 0 to 360 degrees, 4 segments
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(52,51.105), (51.105,52), End=(50,52)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (52, 51.105), (51.105, 52), (50, 52), SegmentCount=2
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(48.895,52), (48,51.105), End=(48,50)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (48.895, 52), (48, 51.105), (48, 50), SegmentCount=3
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(48,48.895), (48.895,48), End=(50,48)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (48, 48.895), (48.895, 48), (50, 48), SegmentCount=4
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(51.105,48), (52,48.895), End=(52,50)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (51.105, 48), (52, 48.895), (52, 50), SegmentCount=5
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: fill
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: fill
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Fill method called - attempting to create path
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Current path bounds: 48.0,48.0 [4.0x4.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler logPathDetails
+INFO: Path details: 1 moves, 0 lines, 0 quad curves, 4 cubic curves, 0 closes)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Generating path data from iterator
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: MOVETO 52.0,50.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 52.0,51.10457, 51.10457,52.0, 50.0,52.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 48.89543,52.0, 48.0,51.10457, 48.0,50.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 48.0,48.89543, 48.89543,48.0, 50.0,48.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 51.10457,48.0, 52.0,48.89543, 52.0,50.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Automatically closing path for fill operation
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Creating SVG path element with data: M 52.0 50.0 C 52.0 51.1 51.1 52.0 50.0 52.0 C 48.9 52.0 48.0 51.1 48.0 50.0 C 48.0 48.9 48.9 48.0 50.0 48.0 C 51.1 48.0 52.0 48.9 52.0 50.0 Z
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path element added to SVG document with ID: path-1743802762017-2
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler newPath
+WARNING: newPath called with non-empty path - potential drawing loss. Path bounds: java.awt.geom.Rectangle2D$Double[x=48.0,y=48.0,w=4.0,h=4.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 80
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 2
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 360
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: arc
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: arc
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: No current point, moving to start of arc (82, 0)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (82, 0), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: Drawing arc from 0 to 360 degrees, 4 segments
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(82,1.105), (81.105,2), End=(80,2)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (82, 1.105), (81.105, 2), (80, 2), SegmentCount=2
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(78.895,2), (78,1.105), End=(78,0)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (78.895, 2), (78, 1.105), (78, 0), SegmentCount=3
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(78,-1.105), (78.895,-2), End=(80,-2)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (78, -1.105), (78.895, -2), (80, -2), SegmentCount=4
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(81.105,-2), (82,-1.105), End=(82,-0)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (81.105, -2), (82, -1.105), (82, -0), SegmentCount=5
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: fill
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: fill
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Fill method called - attempting to create path
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Current path bounds: 78.0,-2.0 [4.0x4.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler logPathDetails
+INFO: Path details: 1 moves, 0 lines, 0 quad curves, 4 cubic curves, 0 closes)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Generating path data from iterator
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: MOVETO 82.0,0.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 82.0,1.1045696, 81.10457,2.0, 80.0,2.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 78.89543,2.0, 78.0,1.1045696, 78.0,2.4492937E-16
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 78.0,-1.1045696, 78.89543,-2.0, 80.0,-2.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 81.10457,-2.0, 82.0,-1.1045696, 82.0,-4.8985874E-16
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Automatically closing path for fill operation
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Creating SVG path element with data: M 82.0 0.0 C 82.0 1.1 81.1 2.0 80.0 2.0 C 78.9 2.0 78.0 1.1 78.0 0.0 C 78.0 -1.1 78.9 -2.0 80.0 -2.0 C 81.1 -2.0 82.0 -1.1 82.0 -0.0 Z
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path element added to SVG document with ID: path-1743802762047-3
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler newPath
+WARNING: newPath called with non-empty path - potential drawing loss. Path bounds: java.awt.geom.Rectangle2D$Double[x=78.0,y=-2.0,w=4.0,h=4.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: setrgbcolor
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: setrgbcolor
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: newpath
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 100
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 3
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 360
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: arc
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: arc
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: No current point, moving to start of arc (53, 100)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (53, 100), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: Drawing arc from 0 to 360 degrees, 4 segments
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(53,101.657), (51.657,103), End=(50,103)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (53, 101.657), (51.657, 103), (50, 103), SegmentCount=2
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(48.343,103), (47,101.657), End=(47,100)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (48.343, 103), (47, 101.657), (47, 100), SegmentCount=3
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(47,98.343), (48.343,97), End=(50,97)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (47, 98.343), (48.343, 97), (50, 97), SegmentCount=4
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(51.657,97), (53,98.343), End=(53,100)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (51.657, 97), (53, 98.343), (53, 100), SegmentCount=5
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: fill
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: fill
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Fill method called - attempting to create path
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Current path bounds: 47.0,97.0 [6.0x6.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler logPathDetails
+INFO: Path details: 1 moves, 0 lines, 0 quad curves, 4 cubic curves, 0 closes)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Generating path data from iterator
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: MOVETO 53.0,100.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 53.0,101.65685, 51.656853,103.0, 50.0,103.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 48.343147,103.0, 47.0,101.65685, 47.0,100.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 47.0,98.34315, 48.343147,97.0, 50.0,97.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 51.656853,97.0, 53.0,98.34315, 53.0,100.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Automatically closing path for fill operation
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Creating SVG path element with data: M 53.0 100.0 C 53.0 101.7 51.7 103.0 50.0 103.0 C 48.3 103.0 47.0 101.7 47.0 100.0 C 47.0 98.3 48.3 97.0 50.0 97.0 C 51.7 97.0 53.0 98.3 53.0 100.0 Z
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path element added to SVG document with ID: path-1743802762063-4
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler newPath
+WARNING: newPath called with non-empty path - potential drawing loss. Path bounds: java.awt.geom.Rectangle2D$Double[x=47.0,y=97.0,w=6.0,h=6.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 150
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 100
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 3
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 360
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: arc
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: arc
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: No current point, moving to start of arc (153, 100)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (153, 100), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: Drawing arc from 0 to 360 degrees, 4 segments
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(153,101.657), (151.657,103), End=(150,103)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (153, 101.657), (151.657, 103), (150, 103), SegmentCount=2
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(148.343,103), (147,101.657), End=(147,100)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (148.343, 103), (147, 101.657), (147, 100), SegmentCount=3
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(147,98.343), (148.343,97), End=(150,97)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (147, 98.343), (148.343, 97), (150, 97), SegmentCount=4
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(151.657,97), (153,98.343), End=(153,100)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (151.657, 97), (153, 98.343), (153, 100), SegmentCount=5
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: fill
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: fill
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Fill method called - attempting to create path
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Current path bounds: 147.0,97.0 [6.0x6.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler logPathDetails
+INFO: Path details: 1 moves, 0 lines, 0 quad curves, 4 cubic curves, 0 closes)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Generating path data from iterator
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: MOVETO 153.0,100.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 153.0,101.65685, 151.65686,103.0, 150.0,103.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 148.34314,103.0, 147.0,101.65685, 147.0,100.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 147.0,98.34315, 148.34314,97.0, 150.0,97.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 151.65686,97.0, 153.0,98.34315, 153.0,100.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Automatically closing path for fill operation
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Creating SVG path element with data: M 153.0 100.0 C 153.0 101.7 151.7 103.0 150.0 103.0 C 148.3 103.0 147.0 101.7 147.0 100.0 C 147.0 98.3 148.3 97.0 150.0 97.0 C 151.7 97.0 153.0 98.3 153.0 100.0 Z
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path element added to SVG document with ID: path-1743802762079-5
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler newPath
+WARNING: newPath called with non-empty path - potential drawing loss. Path bounds: java.awt.geom.Rectangle2D$Double[x=147.0,y=97.0,w=6.0,h=6.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 3
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 360
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: arc
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: arc
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: No current point, moving to start of arc (53, 50)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (53, 50), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: Drawing arc from 0 to 360 degrees, 4 segments
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(53,51.657), (51.657,53), End=(50,53)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (53, 51.657), (51.657, 53), (50, 53), SegmentCount=2
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(48.343,53), (47,51.657), End=(47,50)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (48.343, 53), (47, 51.657), (47, 50), SegmentCount=3
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(47,48.343), (48.343,47), End=(50,47)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (47, 48.343), (48.343, 47), (50, 47), SegmentCount=4
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(51.657,47), (53,48.343), End=(53,50)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (51.657, 47), (53, 48.343), (53, 50), SegmentCount=5
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: fill
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: fill
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Fill method called - attempting to create path
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Current path bounds: 47.0,47.0 [6.0x6.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler logPathDetails
+INFO: Path details: 1 moves, 0 lines, 0 quad curves, 4 cubic curves, 0 closes)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Generating path data from iterator
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: MOVETO 53.0,50.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 53.0,51.656853, 51.656853,53.0, 50.0,53.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 48.343147,53.0, 47.0,51.656853, 47.0,50.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 47.0,48.343147, 48.343147,47.0, 50.0,47.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 51.656853,47.0, 53.0,48.343147, 53.0,50.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Automatically closing path for fill operation
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Creating SVG path element with data: M 53.0 50.0 C 53.0 51.7 51.7 53.0 50.0 53.0 C 48.3 53.0 47.0 51.7 47.0 50.0 C 47.0 48.3 48.3 47.0 50.0 47.0 C 51.7 47.0 53.0 48.3 53.0 50.0 Z
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path element added to SVG document with ID: path-1743802762079-6
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler newPath
+WARNING: newPath called with non-empty path - potential drawing loss. Path bounds: java.awt.geom.Rectangle2D$Double[x=47.0,y=47.0,w=6.0,h=6.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 150
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 3
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 360
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: arc
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: arc
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: No current point, moving to start of arc (153, 50)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (153, 50), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter lambda$initializeSystemDict$7
+INFO: arc: Drawing arc from 0 to 360 degrees, 4 segments
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(153,51.657), (151.657,53), End=(150,53)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (153, 51.657), (151.657, 53), (150, 53), SegmentCount=2
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(148.343,53), (147,51.657), End=(147,50)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (148.343, 53), (147, 51.657), (147, 50), SegmentCount=3
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(147,48.343), (148.343,47), End=(150,47)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (147, 48.343), (148.343, 47), (150, 47), SegmentCount=4
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Control points=(151.657,47), (153,48.343), End=(153,50)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler curveTo
+INFO: curveTo: Raw (151.657, 47), (153, 48.343), (153, 50), SegmentCount=5
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: fill
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: fill
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Fill method called - attempting to create path
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Current path bounds: 147.0,47.0 [6.0x6.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler logPathDetails
+INFO: Path details: 1 moves, 0 lines, 0 quad curves, 4 cubic curves, 0 closes)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Generating path data from iterator
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: MOVETO 153.0,50.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 153.0,51.656853, 151.65686,53.0, 150.0,53.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 148.34314,53.0, 147.0,51.656853, 147.0,50.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 147.0,48.343147, 148.34314,47.0, 150.0,47.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path segment: CUBICTO 151.65686,47.0, 153.0,48.343147, 153.0,50.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Automatically closing path for fill operation
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Creating SVG path element with data: M 153.0 50.0 C 153.0 51.7 151.7 53.0 150.0 53.0 C 148.3 53.0 147.0 51.7 147.0 50.0 C 147.0 48.3 148.3 47.0 150.0 47.0 C 151.7 47.0 153.0 48.3 153.0 50.0 Z
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler fill
+INFO: Path element added to SVG document with ID: path-1743802762094-7
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler newPath
+WARNING: newPath called with non-empty path - potential drawing loss. Path bounds: java.awt.geom.Rectangle2D$Double[x=147.0,y=47.0,w=6.0,h=6.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0.5
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: setgray
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: setgray
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: newpath
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 100
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (50, 100), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 80
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 150
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: lineto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: lineto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 150
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 100
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: lineto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: lineto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: stroke
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: stroke
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Stroke method called - attempting to create path
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Current path bounds: 50.0,100.0 [100.0x50.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler logPathDetails
+INFO: Path details: 1 moves, 2 lines, 0 quad curves, 0 cubic curves, 0 closes)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Generating path data from iterator
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path segment 1: MOVETO 50.0,100.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path segment 2: LINETO 80.0,150.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path segment 3: LINETO 150.0,100.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Creating SVG path element with data: M 50.0 100.0 L 80.0 150.0 L 150.0 100.0 
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path element added to SVG document with ID: path-1743802762110-2
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler newPath
+WARNING: newPath called with non-empty path - potential drawing loss. Path bounds: java.awt.geom.Rectangle2D$Double[x=50.0,y=100.0,w=100.0,h=50.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: newpath
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (50, 50), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 80
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: lineto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: lineto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 150
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 50
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: lineto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: lineto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: stroke
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: stroke
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Stroke method called - attempting to create path
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Current path bounds: 50.0,0.0 [100.0x50.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler logPathDetails
+INFO: Path details: 1 moves, 2 lines, 0 quad curves, 0 cubic curves, 0 closes)
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Generating path data from iterator
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path segment 1: MOVETO 50.0,50.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path segment 2: LINETO 80.0,0.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path segment 3: LINETO 150.0,50.0
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Creating SVG path element with data: M 50.0 50.0 L 80.0 0.0 L 150.0 50.0 
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler stroke
+INFO: Path element added to SVG document with ID: path-1743802762110-3
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler newPath
+WARNING: newPath called with non-empty path - potential drawing loss. Path bounds: java.awt.geom.Rectangle2D$Double[x=50.0,y=0.0,w=100.0,h=50.0]
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: /Helvetica
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: findfont
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter processOperator
+WARNING: Unhandled operator: findfont
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 8
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: scalefont
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter processOperator
+WARNING: Unhandled operator: scalefont
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: setfont
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter processOperator
+WARNING: Unhandled operator: setfont
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 0
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: setrgbcolor
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: setrgbcolor
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 45
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 110
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (45, 110), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: (Start/CP1)
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: show
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter processOperator
+WARNING: Unhandled operator: show
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 80
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 160
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (80, 160), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: (CP2)
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: show
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter processOperator
+WARNING: Unhandled operator: show
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 150
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 110
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (150, 110), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: (End)
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: show
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter processOperator
+WARNING: Unhandled operator: show
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 60
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 30
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (60, 30), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: (Regular
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: curveto)
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter processOperator
+WARNING: Unhandled operator: curveto)
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: show
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter processOperator
+WARNING: Unhandled operator: show
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 60
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: 120
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Found user-defined operator: moveto
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler moveTo
+INFO: moveTo: Raw (60, 120), SegmentCount=1
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: (v
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: operator)
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter processOperator
+WARNING: Unhandled operator: operator)
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: show
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter processOperator
+WARNING: Unhandled operator: show
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter interpretToken
+INFO: Processing token: showpage
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsInterpreter processEps
+INFO: Finished interpreting EPS file.
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler writeToFile
+INFO: Valid path count: 4
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler writeToFile
+INFO: Found 4 valid paths in SVG document, skipping fallback cat
+Apr 04, 2025 2:39:22 PM com.convert2web.BatikGraphicsHandler writeToFile
+INFO: SVG file written successfully to: C:/dev/convert2web/test/curve_tests/output/v_test.svg
+Apr 04, 2025 2:39:22 PM com.convert2web.EpsToSvgConverter convert
+INFO: Conversion completed successfully. SVG written to: C:/dev/convert2web/test/curve_tests/output/v_test.svg
+Conversion completed successfully.
