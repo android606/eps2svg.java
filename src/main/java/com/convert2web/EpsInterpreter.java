@@ -249,6 +249,43 @@ public class EpsInterpreter {
             }
         });
         
+        // y takes 4 arguments: x1 y1 x3 y3 and uses x3,y3 as the second control point
+        systemDict.put("y", (PostScriptOperator) () -> {
+            if (operandStack.size() >= 4) {
+                double y3 = popDouble();
+                double x3 = popDouble();
+                double y1 = popDouble();
+                double x1 = popDouble();
+                
+                // Get current point as starting point
+                Point2D currentPoint = graphicsHandler.getCurrentPoint();
+                if (currentPoint == null) {
+                    logger.log(Level.WARNING, "y: No current point defined for starting point");
+                    // Restore stack
+                    operandStack.push(x1);
+                    operandStack.push(y1);
+                    operandStack.push(x3);
+                    operandStack.push(y3);
+                    return;
+                }
+                
+                double x0 = currentPoint.getX();
+                double y0 = currentPoint.getY();
+                
+                // For y operator, the second control point (x2,y2) is the same as the endpoint (x3,y3)
+                double x2 = x3;
+                double y2 = y3;
+                
+                // Log the curve parameters for debugging
+                logger.log(Level.INFO, "Executing y: currentPoint=({0}, {1}), control1=({2}, {3}), end/control2=({4}, {5})",
+                    new Object[]{x0, y0, x1, y1, x3, y3});
+                    
+                graphicsHandler.curveTo(x1, y1, x2, y2, x3, y3);
+            } else {
+                logger.log(Level.WARNING, "y: stack underflow");
+            }
+        });
+        
         systemDict.put("arc", (PostScriptOperator) () -> {
             if (operandStack.size() >= 5) {
                 Object angle2Obj = operandStack.pop();

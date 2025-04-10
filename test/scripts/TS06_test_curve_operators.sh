@@ -48,7 +48,7 @@ java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$TEST_IMAGES_DI
 
 if [ -f "$OUTPUT_DIR/curveto_test.svg" ] && [ -s "$OUTPUT_DIR/curveto_test.svg" ]; then
     # Check for the presence of Bézier curve commands in the SVG
-    if grep -q "C " "$OUTPUT_DIR/curveto_test.svg"; then
+    if grep -q "C" "$OUTPUT_DIR/curveto_test.svg"; then
         print_pass | tee -a "$LOG_FILE"
         echo "Found Bézier curve commands in curveto_test.svg" >> "$LOG_FILE"
     else
@@ -69,7 +69,7 @@ java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$TEST_IMAGES_DI
 
 if [ -f "$OUTPUT_DIR/v_test.svg" ] && [ -s "$OUTPUT_DIR/v_test.svg" ]; then
     # Check for the presence of Bézier curve commands in the SVG
-    if grep -q "C " "$OUTPUT_DIR/v_test.svg"; then
+    if grep -q "C" "$OUTPUT_DIR/v_test.svg"; then
         print_pass | tee -a "$LOG_FILE"
         echo "Found Bézier curve commands in v_test.svg" >> "$LOG_FILE"
     else
@@ -90,7 +90,7 @@ java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$TEST_IMAGES_DI
 
 if [ -f "$OUTPUT_DIR/y_test.svg" ] && [ -s "$OUTPUT_DIR/y_test.svg" ]; then
     # Check for the presence of Bézier curve commands in the SVG
-    if grep -q "C " "$OUTPUT_DIR/y_test.svg"; then
+    if grep -q "C" "$OUTPUT_DIR/y_test.svg"; then
         print_pass | tee -a "$LOG_FILE"
         echo "Found Bézier curve commands in y_test.svg" >> "$LOG_FILE"
     else

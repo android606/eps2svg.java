@@ -63,7 +63,7 @@ java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar \
 
 if [ -f "$OUTPUT_DIR/subtle_preserved.svg" ] && [ -s "$OUTPUT_DIR/subtle_preserved.svg" ]; then
     # Check for curve commands in the output
-    curves_count=$(grep -c "C " "$OUTPUT_DIR/subtle_preserved.svg" 2>/dev/null || echo "0")
+    curves_count=$(grep -c "C" "$OUTPUT_DIR/subtle_preserved.svg" 2>/dev/null || echo "0")
     echo "Curves found in preserved output: $curves_count" >> "$LOG_FILE"
     
     if [ "$curves_count" -gt 0 ]; then
@@ -92,8 +92,8 @@ java -Dconvert2web.flattenCurves=true -jar target/eps2svg-1.0-SNAPSHOT-jar-with-
 if [ -f "$OUTPUT_DIR/subtle_flattened.svg" ] && [ -s "$OUTPUT_DIR/subtle_flattened.svg" ]; then
     # Check if curves were correctly flattened
     # The flattened output should either have no curve commands or fewer than the preserved version
-    preserved_curves=$(grep -c "C " "$OUTPUT_DIR/subtle_preserved.svg" 2>/dev/null || echo "0")
-    flattened_curves=$(grep -c "C " "$OUTPUT_DIR/subtle_flattened.svg" 2>/dev/null || echo "0")
+    preserved_curves=$(grep -c "C" "$OUTPUT_DIR/subtle_preserved.svg" 2>/dev/null || echo "0")
+    flattened_curves=$(grep -c "C" "$OUTPUT_DIR/subtle_flattened.svg" 2>/dev/null || echo "0")
     
     echo "Curves in preserved output: $preserved_curves" >> "$LOG_FILE"
     echo "Curves in flattened output: $flattened_curves" >> "$LOG_FILE"

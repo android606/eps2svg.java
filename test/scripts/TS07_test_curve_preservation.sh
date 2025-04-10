@@ -91,7 +91,7 @@ fi
 print_test_line "Verifying curve preservation in preserved files" | tee -a "$LOG_FILE"
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 
-curves_preserved=$(grep -c "C " "$OUTPUT_DIR/arc_test_preserved.svg")
+curves_preserved=$(grep -c "C" "$OUTPUT_DIR/arc_test_preserved.svg")
 echo "arc_test_preserved.svg curve commands: $curves_preserved" >> "$LOG_FILE"
 
 if [ $curves_preserved -gt 0 ]; then
@@ -104,7 +104,7 @@ fi
 print_test_line "Verifying curve flattening in flattened files" | tee -a "$LOG_FILE"
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 
-curves_in_flattened=$(grep -c "C " "$OUTPUT_DIR/arc_test_flattened.svg")
+curves_in_flattened=$(grep -c "C" "$OUTPUT_DIR/arc_test_flattened.svg")
 echo "arc_test_flattened.svg curve commands: $curves_in_flattened" >> "$LOG_FILE"
 
 # Flattened curves should have fewer curve commands or none at all
