@@ -19,7 +19,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Make all test scripts executable
-for test_script in "$TEST_DIR/scripts/test_"*.sh; do
+for test_script in "$TEST_DIR/scripts/TS"*.sh; do
     if [ -f "$test_script" ]; then
         chmod +x "$test_script"
     fi
@@ -33,27 +33,26 @@ echo -e "${BLUE}==========================================${NC}" | tee -a "$MAST
 echo -e "${BLUE}Starting EPS to SVG Conversion Test Suites${NC}" | tee -a "$MASTER_LOG"
 echo -e "${BLUE}==========================================${NC}" | tee -a "$MASTER_LOG"
 
-# Define test suites with their IDs and names
-declare -A TEST_SUITE_NAMES
-TEST_SUITE_NAMES["TS00_test_setup.sh"]="Test Setup"
-TEST_SUITE_NAMES["TS01_test_basic_conversion.sh"]="Basic Conversion"
-TEST_SUITE_NAMES["TS02_test_binary_eps.sh"]="Binary EPS Support"
-TEST_SUITE_NAMES["TS03_test_viewbox.sh"]="ViewBox Correctness"
-TEST_SUITE_NAMES["TS04_test_path_bounds.sh"]="Path Boundaries"
-TEST_SUITE_NAMES["TS05_test_visual.sh"]="Visual Quality"
-TEST_SUITE_NAMES["TS06_test_curve_operators.sh"]="Curve Operators"
-TEST_SUITE_NAMES["TS07_test_curve_preservation.sh"]="Curve Preservation"
-TEST_SUITE_NAMES["TS08_test_subtle_curves.sh"]="Subtle Curves"
-TEST_SUITE_NAMES["TS09_test_fix_caution_curve.sh"]="Caution Curve Fix"
-TEST_SUITE_NAMES["TS15_test_negative_y_curves_regression.sh"]="Negative Y Curves Regression"
-# TEST_SUITE_NAMES["TS14_test_regression_example.sh"]="Regression Example" # Deliberately commented out as this is just an example of the correct test script format
+# Function to extract TEST_SUITE_NAME from a test script
+get_test_suite_name() {
+    local ts_name=$1
+    # Extract the TEST_SUITE_NAME value from the script
+    grep -m 1 "TEST_SUITE_NAME=" "$ts_name" | cut -d'"' -f2 || echo "Unknown Test Suite Name"
+}
+
+# Function to extract TEST_SUITE_ID from a test script
+get_test_suite_id() {
+    local ts_name=$1
+    # Extract the TEST_SUITE_ID value from the script
+    grep -m 1 "TEST_SUITE_ID=" "$ts_name" | cut -d'"' -f2 || echo "Unknown Test Suite ID"
+}
 
 # Function to run a test script and track results
 run_test_suite() {
     local test_script=$1
     local script_name=$(basename "$test_script")
-    local ts_id="${script_name:0:4}"
-    local test_name="${TEST_SUITE_NAMES[$script_name]:-Unknown Test}"
+    local ts_id=$(get_test_suite_id "$test_script")
+    local test_name=$(get_test_suite_name "$test_script")
     
     echo -e "\n-----------------------------------------" | tee -a "$MASTER_LOG"
     echo -e "$ts_id: Running test suite: $test_name" | tee -a "$MASTER_LOG"
@@ -90,23 +89,19 @@ if [ $SETUP_RESULT -eq 0 ] || [ $SETUP_RESULT -eq 1 ]; then
         echo -e "\n${YELLOW}⚠ Setup had warnings or failures with some files. Continuing with tests...${NC}" | tee -a "$MASTER_LOG"
     fi
     
-    # Run each test suite
-    run_test_suite "$TEST_DIR/scripts/TS01_test_basic_conversion.sh"
-    run_test_suite "$TEST_DIR/scripts/TS02_test_binary_eps.sh"
-    run_test_suite "$TEST_DIR/scripts/TS03_test_viewbox.sh"
-    run_test_suite "$TEST_DIR/scripts/TS04_test_path_bounds.sh"
-    run_test_suite "$TEST_DIR/scripts/TS05_test_visual.sh"
-    run_test_suite "$TEST_DIR/scripts/TS06_test_curve_operators.sh"
-    run_test_suite "$TEST_DIR/scripts/TS07_test_curve_preservation.sh"
-    run_test_suite "$TEST_DIR/scripts/TS08_test_subtle_curves.sh"
-    run_test_suite "$TEST_DIR/scripts/TS09_test_fix_caution_curve.sh"
-    run_test_suite "$TEST_DIR/scripts/TS15_test_negative_y_curves_regression.sh"
-    # run_test_suite "$TEST_DIR/scripts/TS14_test_regression_example.sh" # Deliberately commented out as this is just an example of the correct test script format
+    # Find and run all test scripts except TS00 (setup), sorted by number
+    for test_script in $(find "$TEST_DIR/scripts" -type f -name "TS[0-9][0-9]_*.sh" | sort); do
+        # Skip the setup script as we already ran it
+        if [[ $(basename "$test_script") != "TS00_test_setup.sh" ]]; then
+            run_test_suite "$test_script"
+        fi
+    done
 else
     echo -e "\n${RED}✗ Setup failed critically. Skipping remaining tests.${NC}" | tee -a "$MASTER_LOG"
-    # Count remaining suites as failed for summary
-    TOTAL_SUITES=$((TOTAL_SUITES+10))
-    FAILED_SUITES=$((FAILED_SUITES+10))
+    # Count remaining test scripts for summary
+    remaining_scripts=$(find "$TEST_DIR/scripts" -type f -name "TS[0-9][0-9]_*.sh" | grep -v "TS00_" | wc -l)
+    TOTAL_SUITES=$((TOTAL_SUITES+remaining_scripts))
+    FAILED_SUITES=$((FAILED_SUITES+remaining_scripts))
 fi
 
 # Summary

@@ -1,0 +1,46 @@
+{
+  "name": "regression-test-structure",
+  "description": "Guidelines for structuring regression tests in the project",
+  "rules": [
+    {
+      "name": "regression-test-file-structure",
+      "description": "The file structure for regression tests follows a specific pattern",
+      "content": "Regression tests should follow this structure:\n\n1. Test scripts go in the `${workspace}/test/scripts/` directory\n2. Test images go in the `${workspace}/test/test_images/` directory\n3. Test references (expected outputs) go in the `${workspace}/test/references/` directory\n4. Test logs are written to `${workspace}/test/logs/` directory\n5. Test outputs (not including logs) are stored in the `${workspace}/test/output/` directory\n6. Do not create subfolders in any of these directories unless it is absolutely necessary to prevent conflicts, in which case the subfolder should be named after the test suite\n7. Main test runner is `${workspace}/test/run_tests.sh`\n\nJUnit tests for Java components go in `${workspace}/src/test/java/` following Maven conventions."
+    },
+    {
+      "name": "regression-test-naming-conventions",
+      "description": "Naming conventions for regression test files",
+      "content": "Test scripts should follow these naming conventions:\n\n1. Test scripts should be named with a prefix of `TSxx_` where `xx` is a numerical test suite id. Example: `TS01_test_basic_conversion.sh`, `TS14_test_y_operator_regression.sh`\n2. A single test suite may be split over multiple sub-scripts by adding a number to the beginning of the test suite filenames. Example: `TS23_1_test_y_operator_regression-1.sh`, `TS23_2_test_y_operator_regression.sh`. This is acceptable if the test suite is large and complex and would be simpler to debug and maintain if split over multiple scripts.\n3. Regression tests should include 'regression' in the name. Integration tests should include 'integration' in the name. Same with other types of tests.\n4. Test output files should have meaningful names that relate to the test case\n5. Reference files should be named to match the expected output file, with '_reference' suffix"
+    },
+    {
+        "name": "special-test-script-ts00",
+        "description": "Special test script rules for suite TS00",
+        "content": "TS00 is a special test suite that does the following:\n1. Builds the tool using Maven\n2. Clears the `${workspace}/test/output/` directory\n3. Sets up the test environment\n4. Runs the tool on all of the test images in the `${workspace}/test/test_images/` directory with the appropriate arguments to create the output files needed for the rest of the test suites.\n5. Finally, it sets and exports the TEST_SETUP_COMPLETE variable to 'true'.\n6. Build failures, failure to create output files should be considered test suite failures.\n7. Exit with code 0 for success, non-zero for failures"
+    },
+    {
+        "name": "regression-test-script-structure",
+        "description": "Structure of regression test scripts",
+        "content": "Each regression test script should:\n\n1. Start with a shebang line and TEST_SUITE_ID definition\n2. Include a descriptive comment about what specifically is being tested, including the git commit hash of the change that is being tested if possible\n3. Source the shared test utilities: `source \"$( dirname \"${BASH_SOURCE[0]}\" )/test_utils.sh\"`\n4. Create test directories with `create_test_dirs`\n5. Set up logging with a unique log file\n6. Count tests and failures (TOTAL_TESTS and FAILED_TESTS)\n7. Include detailed test cases that check for specific regression issues\n8. If TEST_SETUP_COMPLETE is 'true', assume that the tool is already built and available in the `${workspace}/build/` directory\n9. If TEST_SETUP_COMPLETE is 'true', assume output files already exist in the `${workspace}/test/output/` directory and do not run the tool to create files.\n10: End with a summary of test results\n11. If TEST_SETUP_COMPLETE is 'false', only create the specific output files needed for that test suite. \n12. Exit with code 0 for success, non-zero for failures"
+    },
+    {
+      "name": "regression-test-case-pattern",
+      "description": "Pattern for individual regression test cases",
+      "content": "Each regression test case should follow this pattern:\n\n1. Print a descriptive test line with `print_test_line`\n2. Increment TOTAL_TESTS counter\n3. Running the application is usually not needed at the test case level, since the test files have already been created.\n4. Verify output files exist and have expected content\n5. Print PASS/FAIL status with `print_pass` or `print_fail`\n6. Increment FAILED_TESTS counter if the test fails\n7. Log detailed information about the test results"
+    },
+    {
+      "name": "regression-test-reference-files",
+      "description": "Guidelines for creating and using regression test reference files",
+      "content": "Reference files for regression tests should:\n\n1. Be stored in the `${workspace}/test/references/` directory\n2. Match the expected output format (e.g., SVG for image tests)\n3. Be used for comparison with the output files created by the appropriate test runs\n4. Be updated only when intentionally fixing or changing program behavior"
+    },
+    {
+      "name": "adding-new-regression-test",
+      "description": "Instructions for adding a new regression test",
+      "content": "To add a new regression test:\n\n1. If needed, create appropriate test image files in `${workspace}/test/test_images/` use the existing test images when possible\n2. If a test is simple and is related to an existing test suite, simply add the test to the existing test suite.\n3. If a new test suite is needed, create a new test script in `${workspace}/test/scripts/` using `test_template.sh` as a starting point. Use the next available test suite number and set the TEST_SUITE_ID variable accordingly. Set TEST_SUITE_NAME to a short, descriptive friendly name for the test suite.\n3. Create the test script filename using the test suite number (TSnn_) followed by a short descriptive name for the test suite. \n4. Add the test to `run_tests.sh` by adding the test to the TEST_SUITES array\n5. Ensure the test generates output files in `${workspace}/test/output/`\n6. Include detailed checks for the specific regression you're testing\n7. Make the test script executable (`chmod +x`)\n8. Run the test individually to verify it works correctly"
+    },
+    {
+      "name": "continuous-integration-practices",
+      "description": "Best practices for regression tests in CI",
+      "content": "When running regression tests in CI:\n\n1. Use the main test script as the entry point: `./test/run_tests.sh`\n2. Cache Maven dependencies to speed up builds\n3. Save test artifacts (especially SVG outputs) for review\n4. Ensure all environment-specific dependencies are installed\n5. Consider platform differences (Windows vs Unix paths, GhostScript differences)\n6. Ensure test scripts have appropriate permissions\n7. Generate clear PASS/FAIL results with appropriate exit codes"
+    }
+  ]
+} 

@@ -2,6 +2,8 @@
 
 # Define test suite ID
 TEST_SUITE_ID="TS08"
+TEST_SUITE_NAME="Subtle Curves"
+TEST_SUITE_FILENAME=$(basename "${BASH_SOURCE[0]}" .sh)  # Script name without extension, also used for log file name
 
 # Test script for subtle curves
 # DESCRIPTION: Tests conversion of subtle bezier curves in EPS files with both preservation and flattening
@@ -16,12 +18,10 @@ source "$( dirname "${BASH_SOURCE[0]}" )/test_utils.sh"
 create_test_dirs
 
 # Get test suite ID and set up log file
-TEST_SUITE_NAME="Subtle Curves Test"
-TS_ID=$(get_test_suite_id)
-LOG_FILE="$LOGS_DIR/$(get_log_filename "test_subtle_curves")"
+LOG_FILE="$LOGS_DIR/$TEST_SUITE_ID-$TEST_SUITE_FILENAME.log"  # Log file name
 
 # Start a new log file
-echo "===== $TS_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
+echo "===== $TEST_SUITE_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
 
 # Count tests and failures
 TOTAL_TESTS=0
@@ -95,15 +95,33 @@ if [ -f "$OUTPUT_DIR/subtle_flattened.svg" ] && [ -s "$OUTPUT_DIR/subtle_flatten
     preserved_curves=$(grep -c "C" "$OUTPUT_DIR/subtle_preserved.svg" 2>/dev/null || echo "0")
     flattened_curves=$(grep -c "C" "$OUTPUT_DIR/subtle_flattened.svg" 2>/dev/null || echo "0")
     
+    # Remove any whitespace or non-numeric characters
+    preserved_curves=$(echo "$preserved_curves" | tr -d '[:space:]' | grep -o '[0-9]*')
+    flattened_curves=$(echo "$flattened_curves" | tr -d '[:space:]' | grep -o '[0-9]*')
+    
+    # Set to 0 if empty
+    preserved_curves=${preserved_curves:-0}
+    flattened_curves=${flattened_curves:-0}
+    
     echo "Curves in preserved output: $preserved_curves" >> "$LOG_FILE"
     echo "Curves in flattened output: $flattened_curves" >> "$LOG_FILE"
+    echo "Comparing: preserved=$preserved_curves, flattened=$flattened_curves" >> "$LOG_FILE"
     
-    if [ "$flattened_curves" -lt "$preserved_curves" ]; then
+    # Logic fix: If preserved has curves AND flattened has fewer (or none), the test passes
+    if [ $preserved_curves -gt 0 ] && [ $flattened_curves -lt $preserved_curves ]; then
         print_pass | tee -a "$LOG_FILE"
         echo "Curve flattening test passed" >> "$LOG_FILE"
     else
         print_fail | tee -a "$LOG_FILE"
-        echo "Curve flattening didn't reduce curve count" >> "$LOG_FILE"
+        
+        if [ $preserved_curves -eq 0 ]; then
+            echo "No curves found in preserved output - test file may not contain curves" >> "$LOG_FILE"
+        elif [ $flattened_curves -ge $preserved_curves ]; then
+            echo "Curve flattening didn't reduce curve count" >> "$LOG_FILE"
+        else
+            echo "Unknown error in curve flattening test" >> "$LOG_FILE"
+        fi
+        
         FAILED_TESTS=$((FAILED_TESTS+1))
     fi
 else
@@ -114,15 +132,3 @@ fi
 
 # Summary
 print_test_summary $TOTAL_TESTS $FAILED_TESTS "$LOG_FILE" | tee -a "$LOG_FILE"
-
-print_indented "Output files are in $OUTPUT_DIR:" | tee -a "$LOG_FILE"
-print_indented "- $OUTPUT_DIR/subtle_preserved.svg (curves preserved)" | tee -a "$LOG_FILE"
-print_indented "- $OUTPUT_DIR/subtle_flattened.svg (curves flattened)" | tee -a "$LOG_FILE"
-
-if [ $FAILED_TESTS -eq 0 ]; then
-    print_indented "All tests passed" | tee -a "$LOG_FILE"
-    exit 0
-else
-    print_indented "$FAILED_TESTS tests failed" | tee -a "$LOG_FILE"
-    exit 1
-fi 

@@ -2,6 +2,8 @@
 
 # Define test suite ID
 TEST_SUITE_ID="TS02"
+TEST_SUITE_NAME="Binary EPS Support"
+TEST_SUITE_FILENAME=$(basename "${BASH_SOURCE[0]}" .sh)  # Script name without extension, also used for log file name
 
 # Test binary EPS file handling
 # This script tests that the tool can handle binary EPS files correctly.
@@ -16,12 +18,10 @@ run_test_setup_if_needed
 create_test_dirs
 
 # Get test suite ID and set up log file
-TEST_SUITE_NAME="Binary EPS Support"
-TS_ID=$(get_test_suite_id)
-LOG_FILE="$LOGS_DIR/$(get_log_filename "test_binary_eps")"
+LOG_FILE="$LOGS_DIR/$TEST_SUITE_ID-$TEST_SUITE_FILENAME.log"  # Log file name
 
 # Start a new log file
-echo "===== $TS_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
+echo "===== $TEST_SUITE_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
 
 # Count tests and failures
 TOTAL_TESTS=0
@@ -150,4 +150,4 @@ if [ $FAILED_TESTS -eq 0 ]; then
     exit 0
 else
     exit 1
-fi 
+fi

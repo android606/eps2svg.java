@@ -2,6 +2,8 @@
 
 # Define test suite ID
 TEST_SUITE_ID="TS06"
+TEST_SUITE_NAME="Curve Operators"
+TEST_SUITE_FILENAME=$(basename "${BASH_SOURCE[0]}" .sh)  # Script name without extension, also used for log file name
 
 # Test script for curve operators
 # This script tests the implementation of PostScript curve operators in the EPS to SVG converter
@@ -13,12 +15,10 @@ source "$( dirname "${BASH_SOURCE[0]}" )/test_utils.sh"
 create_test_dirs
 
 # Get test suite ID and set up log file
-TEST_SUITE_NAME="Curve Operators Implementation"
-TS_ID=$(get_test_suite_id)
-LOG_FILE="$LOGS_DIR/$(get_log_filename "test_curve_operators")"
+LOG_FILE="$LOGS_DIR/$TEST_SUITE_ID-$TEST_SUITE_FILENAME.log"  # Log file name
 
 # Start a new log file
-echo "===== $TS_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
+echo "===== $TEST_SUITE_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
 
 # Count tests and failures
 TOTAL_TESTS=0
@@ -176,4 +176,4 @@ if [ $FAILED_TESTS -eq 0 ]; then
 else
     print_indented "$FAILED_TESTS curve operator tests failed" | tee -a "$LOG_FILE"
     exit 1
-fi 
+fi

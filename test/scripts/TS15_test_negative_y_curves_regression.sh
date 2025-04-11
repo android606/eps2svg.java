@@ -2,6 +2,8 @@
 
 # Define test suite ID
 TEST_SUITE_ID="TS15"
+TEST_SUITE_NAME="Negative Y Curves Regression"
+TEST_SUITE_FILENAME=$(basename "${BASH_SOURCE[0]}" .sh)  # Script name without extension, also used for log file name
 
 # Test script for regression testing of negative Y control points in curves
 # DESCRIPTION: Tests that the fix for negative Y control points in Bezier curves remains working
@@ -16,12 +18,10 @@ source "$( dirname "${BASH_SOURCE[0]}" )/test_utils.sh"
 create_test_dirs
 
 # Get test suite ID and set up log file
-TEST_SUITE_NAME="Negative Y Curve Control Points Regression"
-TS_ID=$(get_test_suite_id)
-LOG_FILE="$LOGS_DIR/$(get_log_filename "test_negative_y_curves_regression")"
+LOG_FILE="$LOGS_DIR/$TEST_SUITE_ID-$TEST_SUITE_FILENAME.log"  # Log file name
 
 # Start a new log file
-echo "===== $TS_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
+echo "===== $TEST_SUITE_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
 
 # Count tests and failures
 TOTAL_TESTS=0
@@ -166,4 +166,4 @@ if [ $FAILED_TESTS -eq 0 ]; then
 else
     print_indented "$FAILED_TESTS regression tests failed" | tee -a "$LOG_FILE"
     exit 1
-fi 
+fi

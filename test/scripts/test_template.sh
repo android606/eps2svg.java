@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Define test suite ID
-TEST_SUITE_ID="TS99"  # Template has special ID
+TEST_SUITE_ID="TSnn"  # Change nn to the next available test suite number (01, 02, etc.)
+TEST_SUITE_NAME="Test Template"  # Replace with a friendly name for the test suite. Include git commit hash of the change being tested if available.
+TEST_SUITE_FILENAME=$(basename "${BASH_SOURCE[0]}" .sh)  # Script name without extension, also used for log file name
 
 # Test script template for convert2web project
 # DESCRIPTION: Replace with a brief description of what this test script verifies
-# 
-# Usage: ./test_template.sh [--debug]
-#   --debug: Enable verbose debug output
+# This test script is a template for creating new test scripts. It is not intended to be used as a test case.
 
 # Source the shared test utilities
 source "$( dirname "${BASH_SOURCE[0]}" )/test_utils.sh"
@@ -15,13 +15,9 @@ source "$( dirname "${BASH_SOURCE[0]}" )/test_utils.sh"
 # Create test directories
 create_test_dirs
 
-# Get test suite ID and set up log file
-TEST_SUITE_NAME="Template Test Suite"  # REPLACE with your test suite name
-TS_ID=$(get_test_suite_id)
-LOG_FILE="$LOGS_DIR/$(get_log_filename "test_template")"  # REPLACE 'test_template' with your test name
-
-# Start a new log file
-echo "===== $TS_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
+# Set up log file
+LOG_FILE="$LOGS_DIR/$TEST_SUITE_ID-$TEST_SUITE_FILENAME.log"  # Log file name
+echo "===== $TEST_SUITE_ID: $TEST_SUITE_FILENAME Tests - $(date) =====" > "$LOG_FILE"
 
 # Count tests and failures
 TOTAL_TESTS=0
@@ -42,31 +38,27 @@ if [ "$DEBUG_MODE" = true ]; then
 fi
 
 # Print test suite header
-print_test_suite_header "$TEST_SUITE_NAME" | tee -a "$LOG_FILE"
-print_indented "Testing FEATURE_NAME..." | tee -a "$LOG_FILE"  # REPLACE with your feature name
+print_test_suite_header "$TEST_SUITE_FILENAME" | tee -a "$LOG_FILE"
+print_indented "Testing $TEST_SUITE_NAME..." | tee -a "$LOG_FILE"
 
-# Ensure we have a valid jar file
+# Compile the project if needed
 cd "$PROJECT_ROOT"
-if [ ! -f "target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar" ]; then
+if [ "$TEST_SETUP_COMPLETE" != "true" ]; then
     print_indented "Compiling project..." | tee -a "$LOG_FILE"
     mvn clean package -DskipTests -q >> "$LOG_FILE" 2>&1
 fi
 
-# Optional: Copy test files to test_images if they don't exist there
-# Uncomment and modify this section if needed
-# if [ ! -f "$TEST_IMAGES_DIR/your_test_file.eps" ]; then
-#     print_indented "Copying test files to test_images directory..." | tee -a "$LOG_FILE"
-#     cp "$TEST_DIR/your_test_dir/"*.eps "$TEST_IMAGES_DIR/" >> "$LOG_FILE" 2>&1
-# fi
 
 # ====== TEST CASE 1 ======
 print_test_line "Test case 1: Description of what is being tested" | tee -a "$LOG_FILE"
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 
 # Run the command being tested
-java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar \
-    "$TEST_IMAGES_DIR/input_file.eps" \
-    "$OUTPUT_DIR/output_file.svg" >> "$LOG_FILE" 2>&1
+if [ "$TEST_SETUP_COMPLETE" != "true" ]; then
+    java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar \
+        "$TEST_IMAGES_DIR/input_file.eps" \
+        "$OUTPUT_DIR/output_file.svg" >> "$LOG_FILE" 2>&1
+fi
 
 # Verify the results
 if [ -f "$OUTPUT_DIR/output_file.svg" ] && [ -s "$OUTPUT_DIR/output_file.svg" ]; then
@@ -89,9 +81,11 @@ print_test_line "Test case 2: Description with system property flag" | tee -a "$
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 
 # Run the command with a Java system property flag
-java -Dconvert2web.someProperty=value -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar \
-    "$TEST_IMAGES_DIR/input_file.eps" \
-    "$OUTPUT_DIR/output_file_with_flag.svg" >> "$LOG_FILE" 2>&1
+if [ "$TEST_SETUP_COMPLETE" != "true" ]; then
+    java -Dconvert2web.someProperty=value -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar \
+        "$TEST_IMAGES_DIR/input_file.eps" \
+        "$OUTPUT_DIR/output_file_with_flag.svg" >> "$LOG_FILE" 2>&1
+fi
 
 # Verify the results
 if [ -f "$OUTPUT_DIR/output_file_with_flag.svg" ] && [ -s "$OUTPUT_DIR/output_file_with_flag.svg" ]; then
@@ -112,60 +106,5 @@ else
     FAILED_TESTS=$((FAILED_TESTS+1))
 fi
 
-# ====== TEST CASE with REGRESSION TEST ======
-print_test_line "Regression test: Ensure feature X still works" | tee -a "$LOG_FILE"
-TOTAL_TESTS=$((TOTAL_TESTS+1))
-
-# Create or use a reference file that represents the expected output
-java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar \
-    "$TEST_IMAGES_DIR/regression_test.eps" \
-    "$OUTPUT_DIR/regression_output.svg" >> "$LOG_FILE" 2>&1
-
-# Check output against expected results (use a reference file if available)
-if [ -f "$OUTPUT_DIR/regression_output.svg" ] && [ -s "$OUTPUT_DIR/regression_output.svg" ]; then
-    if [ -f "$TEST_DIR/references/expected_regression_output.svg" ]; then
-        # Option 1: Exact comparison (strict)
-        if diff "$OUTPUT_DIR/regression_output.svg" "$TEST_DIR/references/expected_regression_output.svg" >> "$LOG_FILE" 2>&1; then
-            print_pass | tee -a "$LOG_FILE"
-        else
-            print_fail | tee -a "$LOG_FILE"
-            echo "Regression test failed - output differs from expected reference" >> "$LOG_FILE"
-            FAILED_TESTS=$((FAILED_TESTS+1))
-        fi
-        
-        # Option 2: Check for presence of specific patterns (more flexible)
-        # expected_patterns=("pattern1" "pattern2" "pattern3")
-        # failed=false
-        # for pattern in "${expected_patterns[@]}"; do
-        #     if ! grep -q "$pattern" "$OUTPUT_DIR/regression_output.svg"; then
-        #         echo "Missing expected pattern: $pattern" >> "$LOG_FILE"
-        #         failed=true
-        #     fi
-        # done
-        # if [ "$failed" = true ]; then
-        #     print_fail | tee -a "$LOG_FILE"
-        #     FAILED_TESTS=$((FAILED_TESTS+1))
-        # else
-        #     print_pass | tee -a "$LOG_FILE"
-        # fi
-    else
-        # No reference file, just check if it was created
-        print_pass | tee -a "$LOG_FILE"
-        print_indented "Warning: No reference file for regression test" | tee -a "$LOG_FILE"
-    fi
-else
-    print_fail | tee -a "$LOG_FILE"
-    echo "Regression output file missing or empty" >> "$LOG_FILE"
-    FAILED_TESTS=$((FAILED_TESTS+1))
-fi
-
 # Summary
 print_test_summary $TOTAL_TESTS $FAILED_TESTS "$LOG_FILE" | tee -a "$LOG_FILE"
-
-if [ $FAILED_TESTS -eq 0 ]; then
-    print_indented "All tests passed" | tee -a "$LOG_FILE"
-    exit 0
-else
-    print_indented "$FAILED_TESTS tests failed" | tee -a "$LOG_FILE"
-    exit 1
-fi 

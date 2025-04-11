@@ -57,6 +57,9 @@ public class BatikGraphicsHandler implements GraphicsHandler {
     private java.util.concurrent.atomic.AtomicLong manualIdCounter = new java.util.concurrent.atomic.AtomicLong(0);
     private static final String DEFAULT_ID_PREFIX = "elt";
 
+    // Add field to store the flattenCurves setting
+    private boolean flattenCurves = false;
+
     // Helper class to store graphics state
     private static class GraphicsState {
         final AffineTransform transform;
@@ -94,7 +97,14 @@ public class BatikGraphicsHandler implements GraphicsHandler {
     // private static class IncrementalIdGenerator implements SVGIDGenerator { ... }
 
     // Constructor (can be empty or removed if not needed)
-    public BatikGraphicsHandler() { }
+    public BatikGraphicsHandler() {
+        // Read the flattenCurves system property
+        String flattenCurvesStr = System.getProperty("convert2web.flattenCurves");
+        this.flattenCurves = "true".equalsIgnoreCase(flattenCurvesStr);
+        if (flattenCurves) {
+            logger.log(Level.INFO, "Curve flattening enabled by system property");
+        }
+    }
 
     /**
      * Helper method for initialization
@@ -319,6 +329,13 @@ public class BatikGraphicsHandler implements GraphicsHandler {
              // For now, let it proceed but log warning.
          }
          
+        // Check if curve flattening is enabled - just convert to a line if so
+        if (flattenCurves) {
+            logger.log(Level.FINE, "Flattening curve to line: endpoint ({0},{1})", new Object[]{x3, y3});
+            lineTo(x3, y3);
+            return;
+        }
+        
         // Check for problematic curve control points (negative Y values or other issues)
         if (y1 < -0.1 || y2 < -0.1) {
             logger.log(Level.WARNING, "Detected curve with negative Y control points: ({0},{1}), ({2},{3}). Converting to line.",

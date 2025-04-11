@@ -135,12 +135,14 @@ print_test_summary() {
     echo "Log file: $log_file"
     
     if [ $failed -eq 0 ]; then
-        echo -e "${GREEN}All tests PASSED${NC}"
+        echo -e "${GREEN}All tests in suite $ts_id PASSED${NC}"
         echo ""
-        echo -e "$ts_id Results: ${GREEN}✓ Test suite PASSED${NC}"
+        echo -e "$ts_id Results: ${GREEN}✓ Test suite $ts_id PASSED${NC}"
     else
-        echo -e "${RED}Some tests FAILED${NC}"
+        echo -e "${RED}Some tests in suite $ts_id FAILED${NC}"
         echo ""
-        echo -e "$ts_id Results: ${RED}✗ Test suite FAILED${NC}"
+        echo -e "$ts_id Results: ${RED}✗ Test suite $ts_id FAILED${NC}"
     fi
-} 
+}
+
+echo "Script name: $(get_script_name); Test Suite ID: $(get_test_suite_id)"

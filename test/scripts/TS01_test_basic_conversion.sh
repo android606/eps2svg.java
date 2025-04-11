@@ -2,6 +2,8 @@
 
 # Define test suite ID
 TEST_SUITE_ID="TS01"
+TEST_SUITE_NAME="Basic Conversion"
+TEST_SUITE_FILENAME=$(basename "${BASH_SOURCE[0]}" .sh)  # Script name without extension, also used for log file name
 
 # Test basic conversion functionality
 # This script tests that the tool can convert simple EPS files to SVG, and checks the validity of the output.
@@ -16,12 +18,10 @@ run_test_setup_if_needed
 create_test_dirs
 
 # Get test suite ID and set up log file
-TEST_SUITE_NAME="Basic Conversion"
-TS_ID=$(get_test_suite_id)
-LOG_FILE="$LOGS_DIR/$(get_log_filename "test_basic_conversion")"
+LOG_FILE="$LOGS_DIR/$TEST_SUITE_ID-$TEST_SUITE_FILENAME.log"  # Log file name
 
 # Start a new log file
-echo "===== $TS_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
+echo "===== $TEST_SUITE_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
 
 # Count tests and failures
 TOTAL_TESTS=0
@@ -91,4 +91,4 @@ if [ $FAILED_TESTS -eq 0 ]; then
     exit 0
 else
     exit 1
-fi 
+fi

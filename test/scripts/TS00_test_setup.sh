@@ -2,6 +2,8 @@
 
 # Define test suite ID
 TEST_SUITE_ID="TS00"
+TEST_SUITE_NAME="Test Setup"
+TEST_SUITE_FILENAME=$(basename "${BASH_SOURCE[0]}" .sh)  # Script name without extension, also used for log file name
 
 # TS00: Test Setup
 # This script cleans and builds the software, then runs the conversion tool
@@ -14,12 +16,10 @@ source "$( dirname "${BASH_SOURCE[0]}" )/test_utils.sh"
 create_test_dirs
 
 # Get test suite ID and set up log file
-TEST_SUITE_NAME="Test Setup"
-TS_ID="TS00"
-LOG_FILE="$LOGS_DIR/$(get_log_filename "test_setup")"
+LOG_FILE="$LOGS_DIR/$TEST_SUITE_ID-$TEST_SUITE_FILENAME.log"  # Log file name
 
 # Start a new log file
-echo "===== $TS_ID: $TEST_SUITE_NAME - $(date) =====" > "$LOG_FILE"
+echo "===== $TEST_SUITE_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
 
 # Clean up previous test results
 print_indented "Cleaning all previous test files..." | tee -a "$LOG_FILE"
@@ -118,12 +118,3 @@ print_test_summary $TOTAL_FILES $FAILED_FILES "$LOG_FILE" | tee -a "$LOG_FILE"
 # Add a note about next steps
 echo -e "\nSetup complete. All test files have been processed." | tee -a "$LOG_FILE"
 echo -e "Run individual test scripts or the main test runner (test/run_tests.sh) to test the generated files." | tee -a "$LOG_FILE"
-
-if [ $FAILED_FILES -eq 0 ]; then
-    echo -e "\n$TS_ID Results: ${GREEN}✓ Test setup completed successfully${NC}" | tee -a "$LOG_FILE"
-    exit 0
-else
-    echo -e "\n$TS_ID Results: ${YELLOW}⚠ Test setup completed with some conversion failures${NC}" | tee -a "$LOG_FILE"
-    echo -e "Individual tests may still pass depending on which files failed conversion." | tee -a "$LOG_FILE"
-    exit 1
-fi 

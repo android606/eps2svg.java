@@ -2,6 +2,8 @@
 
 # Define test suite ID
 TEST_SUITE_ID="TS07"
+TEST_SUITE_NAME="Curve Preservation"
+TEST_SUITE_FILENAME=$(basename "${BASH_SOURCE[0]}" .sh)  # Script name without extension, also used for log file name
 
 # Test script for curve preservation options
 # This script tests whether the converter preserves or flattens curve operators
@@ -13,12 +15,10 @@ source "$( dirname "${BASH_SOURCE[0]}" )/test_utils.sh"
 create_test_dirs
 
 # Get test suite ID and set up log file
-TEST_SUITE_NAME="Curve Operators Preservation"
-TS_ID=$(get_test_suite_id)
-LOG_FILE="$LOGS_DIR/$(get_log_filename "test_curve_preservation")"
+LOG_FILE="$LOGS_DIR/$TEST_SUITE_ID-$TEST_SUITE_FILENAME.log"  # Log file name
 
 # Start a new log file
-echo "===== $TS_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
+echo "===== $TEST_SUITE_ID: $TEST_SUITE_NAME Tests - $(date) =====" > "$LOG_FILE"
 
 # Count tests and failures
 TOTAL_TESTS=0
@@ -122,4 +122,4 @@ if [ $FAILED_TESTS -eq 0 ]; then
     exit 0
 else
     exit 1
-fi 
+fi
