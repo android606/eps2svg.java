@@ -7,3 +7,4 @@ test/output/test_paths/
 
 # Logs
 *.log
+target/eps2svg-*.jar

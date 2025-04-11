@@ -23,20 +23,6 @@ is_called_from_run_tests() {
     [[ "$parent_script" == "run_tests.sh" ]]
 }
 
-# Run test setup if needed
-run_test_setup_if_needed() {
-    if [ "$TEST_SETUP_COMPLETE" != "true" ]; then
-        echo "Running test setup..."
-        "$SCRIPT_DIR/TS00_test_setup.sh"
-        local setup_status=$?
-        if [ $setup_status -ne 0 ]; then
-            echo "Test setup failed. Please check the logs."
-            exit $setup_status
-        fi
-        export TEST_SETUP_COMPLETE=true
-    fi
-}
-
 # Create all required test directories
 create_test_dirs() {
     mkdir -p "$LOGS_DIR"

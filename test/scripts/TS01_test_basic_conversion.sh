@@ -11,8 +11,6 @@ TEST_SUITE_FILENAME=$(basename "${BASH_SOURCE[0]}" .sh)  # Script name without e
 # Source the shared test utilities
 source "$( dirname "${BASH_SOURCE[0]}" )/test_utils.sh"
 
-# Run test setup if needed (will be skipped if called from run_tests.sh)
-run_test_setup_if_needed
 
 # Create test directories
 create_test_dirs
