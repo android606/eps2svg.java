@@ -14,9 +14,20 @@ public final class PostScriptLexer implements AutoCloseable {
     private int column = 1;
     private int current = -2;
     private boolean closed;
+    private PostScriptToken pushedBack;
 
     public PostScriptLexer(Reader reader) {
         this.reader = reader;
+    }
+
+    public void pushBack(PostScriptToken token) {
+        if (token == null) {
+            throw new IllegalArgumentException("token");
+        }
+        if (pushedBack != null) {
+            throw new IllegalStateException("Only one pushed-back token is supported");
+        }
+        pushedBack = token;
     }
 
     public List<PostScriptToken> tokenizeAll() throws IOException {
@@ -30,6 +41,12 @@ public final class PostScriptLexer implements AutoCloseable {
     }
 
     public PostScriptToken nextToken() throws IOException {
+        if (pushedBack != null) {
+            PostScriptToken token = pushedBack;
+            pushedBack = null;
+            return token;
+        }
+
         skipWhitespaceAndComments();
 
         int ch = peek();
