@@ -9,5 +9,6 @@ public enum PsValueKind {
     HEX_STRING,
     ARRAY,
     PROCEDURE,
-    DICTIONARY
+    DICTIONARY,
+    RUNTIME_DICTIONARY
 }

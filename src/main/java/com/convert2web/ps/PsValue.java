@@ -272,4 +272,35 @@ public abstract class PsValue {
             return entries.hashCode();
         }
     }
+
+    /**
+     * Live dictionary on the VM operand stack (from {@code dict} / {@code begin}).
+     */
+    public static final class RuntimeDictionaryValue extends PsValue {
+        private final PsDictionary dictionary;
+
+        public RuntimeDictionaryValue(PsDictionary dictionary) {
+            this.dictionary = Objects.requireNonNull(dictionary, "dictionary");
+        }
+
+        public PsDictionary getDictionary() {
+            return dictionary;
+        }
+
+        @Override
+        public PsValueKind getKind() {
+            return PsValueKind.RUNTIME_DICTIONARY;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof RuntimeDictionaryValue
+                    && dictionary.equals(((RuntimeDictionaryValue) o).dictionary);
+        }
+
+        @Override
+        public int hashCode() {
+            return dictionary.hashCode();
+        }
+    }
 }
