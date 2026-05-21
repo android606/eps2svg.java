@@ -72,6 +72,25 @@ class PostScriptLexerTest {
     }
 
     @Test
+    void tokenizesArrayWithLiteralName() throws Exception {
+        List<PostScriptToken> tokens = lex("[/DeviceCMYK]");
+
+        assertEquals(PostScriptTokenType.ARRAY_START, tokens.get(0).getType());
+        assertEquals(PostScriptTokenType.LITERAL_NAME, tokens.get(1).getType());
+        assertEquals("DeviceCMYK", tokens.get(1).getText());
+        assertEquals(PostScriptTokenType.ARRAY_END, tokens.get(2).getType());
+    }
+
+    @Test
+    void skipsAdobeDoubleSlashComments() throws Exception {
+        List<PostScriptToken> tokens = lex("[ //comment\n1 ]");
+
+        assertEquals(PostScriptTokenType.ARRAY_START, tokens.get(0).getType());
+        assertEquals(PostScriptTokenType.INTEGER, tokens.get(1).getType());
+        assertEquals(PostScriptTokenType.ARRAY_END, tokens.get(2).getType());
+    }
+
+    @Test
     void tokenizesBooleans() throws Exception {
         List<PostScriptToken> tokens = lex("true false");
 
@@ -82,6 +101,18 @@ class PostScriptLexerTest {
     @Test
     void rejectsUnterminatedString() {
         assertThrows(IOException.class, () -> lex("(unterminated"));
+    }
+
+    @Test
+    void tokenizesIllustratorAtOperator() throws Exception {
+        List<PostScriptToken> tokens = lex("cp\n@\n0 0 mo");
+        assertEquals(List.of(
+                "NAME(cp)",
+                "NAME(@)",
+                "INTEGER(0)",
+                "INTEGER(0)",
+                "NAME(mo)"),
+                stringify(tokens));
     }
 
     private static List<PostScriptToken> lex(String input) throws Exception {

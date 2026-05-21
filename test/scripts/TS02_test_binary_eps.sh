@@ -65,34 +65,6 @@ for binary_file in "${binary_files[@]}"; do
         print_fail | tee -a "$LOG_FILE"
         FAILED_TESTS=$((FAILED_TESTS+1))
     fi
-    
-    # Check GhostScript conversion
-    output_file="$OUTPUT_DIR/${base_name}_gs.svg"
-    print_test_line "GhostScript conversion of $binary_file" | tee -a "$LOG_FILE"
-    TOTAL_TESTS=$((TOTAL_TESTS+1))
-    
-    if [ -f "$output_file" ] && [ -s "$output_file" ]; then
-        echo "Examining output file: $output_file" >> "$LOG_FILE"
-        print_pass | tee -a "$LOG_FILE"
-    else
-        echo "Output file missing or empty: $output_file" >> "$LOG_FILE"
-        print_fail | tee -a "$LOG_FILE"
-        FAILED_TESTS=$((FAILED_TESTS+1))
-    fi
-    
-    # Check TIFF preview conversion
-    output_file="$OUTPUT_DIR/${base_name}_tiff.svg"
-    print_test_line "TIFF preview conversion of $binary_file" | tee -a "$LOG_FILE"
-    TOTAL_TESTS=$((TOTAL_TESTS+1))
-    
-    if [ -f "$output_file" ] && [ -s "$output_file" ]; then
-        echo "Examining output file: $output_file" >> "$LOG_FILE"
-        print_pass | tee -a "$LOG_FILE"
-    else
-        # This might fail if the EPS doesn't have a TIFF preview, so handle with caution
-        print_warning | tee -a "$LOG_FILE"
-        echo "Output file missing for TIFF preview conversion - this may be expected" >> "$LOG_FILE"
-    fi
 done
 
 # Special test: Compare binary and text versions of the same file

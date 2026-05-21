@@ -196,11 +196,19 @@ public abstract class PsValue {
         private final List<PsValue> elements;
 
         public ArrayValue(List<PsValue> elements) {
-            this.elements = List.copyOf(elements);
+            this.elements = new java.util.ArrayList<>(elements);
         }
 
         public List<PsValue> getElements() {
             return elements;
+        }
+
+        public void setElement(int index, PsValue value) {
+            elements.set(index, value);
+        }
+
+        public PsValue getElement(int index) {
+            return elements.get(index);
         }
 
         @Override
@@ -276,6 +284,37 @@ public abstract class PsValue {
     /**
      * Live dictionary on the VM operand stack (from {@code dict} / {@code begin}).
      */
+    /** Sentinel pushed by {@code mark} for stack segment boundaries. */
+    /** Operand-stack token pushed by {@code save}, consumed by {@code restore}. */
+    public static final class SaveStateValue extends PsValue {
+        private final VmGraphicsState graphicsState;
+
+        public SaveStateValue(VmGraphicsState graphicsState) {
+            this.graphicsState = graphicsState;
+        }
+
+        public VmGraphicsState getGraphicsState() {
+            return graphicsState;
+        }
+
+        @Override
+        public PsValueKind getKind() {
+            return PsValueKind.SAVE;
+        }
+    }
+
+    public static final class MarkValue extends PsValue {
+        public static final MarkValue INSTANCE = new MarkValue();
+
+        private MarkValue() {
+        }
+
+        @Override
+        public PsValueKind getKind() {
+            return PsValueKind.MARK;
+        }
+    }
+
     public static final class RuntimeDictionaryValue extends PsValue {
         private final PsDictionary dictionary;
 

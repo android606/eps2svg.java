@@ -27,6 +27,40 @@ public final class Matrix {
         return new Matrix(1, 0, 0, 1, 0, 0);
     }
 
+    /** PostScript {@code concat}: replaces this with this * other. */
+    public Matrix postConcat(Matrix other) {
+        return new Matrix(
+                a * other.a + b * other.c,
+                a * other.b + b * other.d,
+                c * other.a + d * other.c,
+                c * other.b + d * other.d,
+                e * other.a + f * other.c + other.e,
+                e * other.b + f * other.d + other.f);
+    }
+
+    public double transformX(double x, double y) {
+        return a * x + c * y + e;
+    }
+
+    public double transformY(double x, double y) {
+        return b * x + d * y + f;
+    }
+
+    public Matrix invert() {
+        double det = a * d - b * c;
+        if (det == 0) {
+            throw new IllegalArgumentException("singular matrix");
+        }
+        double invDet = 1.0 / det;
+        double na = d * invDet;
+        double nb = -b * invDet;
+        double nc = -c * invDet;
+        double nd = a * invDet;
+        double ne = -(na * e + nc * f);
+        double nf = -(nb * e + nd * f);
+        return new Matrix(na, nb, nc, nd, ne, nf);
+    }
+
     public double getA() {
         return a;
     }

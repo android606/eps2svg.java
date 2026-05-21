@@ -19,6 +19,10 @@ public final class EpsDocumentBuilder {
         return this;
     }
 
+    public BoundingBox getBoundingBox() {
+        return boundingBox;
+    }
+
     public EpsDocumentBuilder setHiResBoundingBox(BoundingBox hiResBoundingBox) {
         this.hiResBoundingBox = hiResBoundingBox;
         return this;
@@ -31,6 +35,12 @@ public final class EpsDocumentBuilder {
 
     public EpsDocumentBuilder addFill(Path path, PaintStyle fill, WindingRule windingRule, Matrix ctm) {
         commands.add(new GraphicsCommand.Fill(path, fill, windingRule, ctm));
+        return this;
+    }
+
+    /** Inserts a fill so it paints behind subsequently recorded artwork. */
+    public EpsDocumentBuilder addFillAtFront(Path path, PaintStyle fill, WindingRule windingRule, Matrix ctm) {
+        commands.add(0, new GraphicsCommand.Fill(path, fill, windingRule, ctm));
         return this;
     }
 

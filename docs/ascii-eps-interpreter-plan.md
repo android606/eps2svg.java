@@ -4,7 +4,7 @@
 
 Build a standards-focused ASCII EPS/PostScript interpreter in Java that produces a renderer-neutral in-memory document model. SVG is the first output renderer; later renderers should consume the same model without reinterpreting EPS.
 
-Binary EPS cleanup and Ghostscript removal are deferred. For now, any binary EPS path should be treated only as compatibility plumbing that eventually feeds extracted ASCII PostScript into the same interpreter.
+Binary DOS EPS uses `BinaryEpsReader` plus `BinaryEpsConverter` (Adobe AI3 page body or full embedded PostScript via the VM). TIFF preview fallback is not used; unsupported binary files fail with an error. Ghostscript `eps2write` ASCII EPS uses the page stream between `%%EndPageSetup` and `endstream`.
 
 ## Target Architecture
 
@@ -64,6 +64,7 @@ Verification:
 
 Verification:
 
+- `PostScriptVmOperatorCoverageTest` has one test per standard operator from sections 3 and 5 below; unimplemented operators fail until added.
 - VM tests assert stack-before and stack-after behavior for every supported non-graphics operator.
 - Malformed programs fail with typed interpreter errors.
 - In-scope EPS fixtures run without `Unhandled operator` warnings.
@@ -92,12 +93,14 @@ Verification:
 
 Verification:
 
+- `PostScriptVmGraphicsTest` asserts fill/stroke/clip commands and paths in `EpsDocument`.
 - Each supported graphics operator has a model-level fixture test.
 - `gsave/grestore` restores graphics state without deleting already-emitted document commands.
 - File-specific coordinate hacks are removed after general curve/path tests pass.
 
 ### 6. SVG Renderer
 
+- `SvgRenderer` and `AsciiEpsConverter` implement the document-to-SVG path (no Batik in model/VM).
 - Implement `SvgRenderer` from `EpsDocument`.
 - Generate valid XML and SVG namespace declarations.
 - Emit correct `viewBox`, dimensions, path data, fill rules, stroke attributes, clipping paths, transforms, and supported text/image elements.

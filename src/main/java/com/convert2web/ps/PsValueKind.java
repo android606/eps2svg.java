@@ -10,5 +10,7 @@ public enum PsValueKind {
     ARRAY,
     PROCEDURE,
     DICTIONARY,
-    RUNTIME_DICTIONARY
+    RUNTIME_DICTIONARY,
+    MARK,
+    SAVE
 }

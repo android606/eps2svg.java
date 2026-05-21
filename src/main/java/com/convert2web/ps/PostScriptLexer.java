@@ -94,6 +94,16 @@ public final class PostScriptLexer implements AutoCloseable {
         }
         if (ch == '/') {
             read();
+            if (peek() == '/') {
+                read();
+                while (true) {
+                    int c = read();
+                    if (c == -1 || c == '\n' || c == '\r') {
+                        break;
+                    }
+                }
+                return nextToken();
+            }
             return new PostScriptToken(PostScriptTokenType.LITERAL_NAME, readName(), startLine, startColumn);
         }
         if (isNumberStart(ch)) {
@@ -273,6 +283,17 @@ public final class PostScriptLexer implements AutoCloseable {
                 }
                 continue;
             }
+            if (ch == '/' && peekNext() == '/') {
+                read();
+                read();
+                while (true) {
+                    int c = read();
+                    if (c == -1 || c == '\n' || c == '\r') {
+                        break;
+                    }
+                }
+                continue;
+            }
             return;
         }
     }
@@ -282,6 +303,19 @@ public final class PostScriptLexer implements AutoCloseable {
             current = reader.read();
         }
         return current;
+    }
+
+    private int peekNext() throws IOException {
+        if (peek() == -1) {
+            return -1;
+        }
+        if (!reader.markSupported()) {
+            throw new IOException("Reader must support mark() for PostScriptLexer");
+        }
+        reader.mark(1);
+        int second = reader.read();
+        reader.reset();
+        return second;
     }
 
     private int read() throws IOException {
@@ -323,7 +357,7 @@ public final class PostScriptLexer implements AutoCloseable {
 
     private static boolean isNameStart(int ch) {
         return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
-                || ch == '_' || ch == '$' || ch == '*' || ch == '\'';
+                || ch == '_' || ch == '$' || ch == '*' || ch == '\'' || ch == '@';
     }
 
     private IOException syntaxError(String message) {

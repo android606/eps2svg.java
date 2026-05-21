@@ -65,9 +65,6 @@ jobs:
         distribution: 'adopt'
         cache: maven
     
-    - name: Install GhostScript
-      run: sudo apt-get update && sudo apt-get install -y ghostscript
-    
     - name: Run Tests
       run: ./test/test_all.sh
     
@@ -78,15 +75,7 @@ jobs:
         path: test/output/
 ```
 
-### 2. Environment-Specific Dependencies
-
-The conversion tool depends on GhostScript for certain operations. Ensure this is installed in your CI environment:
-
-- **Linux/Ubuntu**: `apt-get install ghostscript`
-- **Windows**: GhostScript should be in PATH (gswin64c.exe)
-- **macOS**: `brew install ghostscript`
-
-### 3. Test Data Management
+### 2. Test Data Management
 
 - Keep reference test files in version control
 - Consider using Git LFS for larger binary test files
@@ -115,7 +104,6 @@ For more detailed reporting, consider:
 The EPS to SVG converter may behave differently across platforms due to:
 
 - Path separators (Windows vs Unix)
-- GhostScript implementation differences
 - Font rendering differences
 
 Design tests with these differences in mind and use platform-specific assertions when needed.
@@ -131,10 +119,9 @@ To add new tests:
 
 ## Common CI Issues and Solutions
 
-1. **GhostScript not found**: Ensure GhostScript is installed and in PATH
-2. **Permission denied**: Make sure test scripts are executable (`chmod +x *.sh`)
-3. **Font differences**: Use basic fonts or embed them in test files
-4. **Platform-specific paths**: Use `$SCRIPT_DIR` pattern for path resolution
+1. **Permission denied**: Make sure test scripts are executable (`chmod +x *.sh`)
+2. **Font differences**: Use basic fonts or embed them in test files
+3. **Platform-specific paths**: Use `$SCRIPT_DIR` pattern for path resolution
 
 ## Future CI Enhancements
 

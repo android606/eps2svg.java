@@ -59,10 +59,10 @@ for test_file in "${test_files[@]}"; do
     input_file="$TEST_IMAGES_DIR/$test_file"
     base_name="${test_file%.*}"
     
-    # Check if file is binary EPS
+    # Check if file is DOS binary EPS (exit 0 = binary)
     java -cp target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar com.convert2web.BinaryEpsInterpreter "$input_file" > /dev/null 2>&1
     is_binary=$?
-    
+
     # Normal conversion for all files
     TOTAL_FILES=$((TOTAL_FILES+1))
     output_file="$OUTPUT_DIR/${base_name}_normal.svg"
@@ -76,39 +76,6 @@ for test_file in "${test_files[@]}"; do
     else
         print_fail | tee -a "$LOG_FILE"
         FAILED_FILES=$((FAILED_FILES+1))
-    fi
-    
-    # Only process binary files with GhostScript and TIFF modes
-    if [[ "$test_file" == *"-binary"* ]] || [[ "$is_binary" -eq 0 ]]; then
-        TOTAL_FILES=$((TOTAL_FILES+2))  # Add 2 more tests for binary files
-        
-        # GhostScript conversion
-        output_file="$OUTPUT_DIR/${base_name}_gs.svg"
-        print_test_line "Processing $test_file (GhostScript mode)" | tee -a "$LOG_FILE"
-        
-        echo "Running: java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar \"$input_file\" \"$output_file\" --force-ghostscript" >> "$LOG_FILE"
-        java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$input_file" "$output_file" --force-ghostscript >> "$LOG_FILE" 2>&1
-        
-        if [ -f "$output_file" ] && [ -s "$output_file" ]; then
-            print_pass | tee -a "$LOG_FILE"
-        else
-            print_fail | tee -a "$LOG_FILE"
-            FAILED_FILES=$((FAILED_FILES+1))
-        fi
-        
-        # TIFF preview conversion
-        output_file="$OUTPUT_DIR/${base_name}_tiff.svg"
-        print_test_line "Processing $test_file (TIFF preview mode)" | tee -a "$LOG_FILE"
-        
-        echo "Running: java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar \"$input_file\" \"$output_file\" --force-tiff" >> "$LOG_FILE"
-        java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$input_file" "$output_file" --force-tiff >> "$LOG_FILE" 2>&1
-        
-        if [ -f "$output_file" ] && [ -s "$output_file" ]; then
-            print_pass | tee -a "$LOG_FILE"
-        else
-            print_warning | tee -a "$LOG_FILE"
-            echo "Note: TIFF preview conversion may fail if the EPS doesn't contain a preview" >> "$LOG_FILE"
-        fi
     fi
 done
 

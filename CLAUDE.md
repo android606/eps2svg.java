@@ -6,11 +6,13 @@ The first milestone is an ASCII EPS/PostScript interpreter that builds a Java in
 
 Read [docs/ascii-eps-interpreter-plan.md](docs/ascii-eps-interpreter-plan.md) before implementing interpreter or renderer changes.
 
+Illustrator EPS uses a three-tier pipeline (full prolog, prolog+page, page+shorthand). See [docs/illustrator-conversion-strategy.md](docs/illustrator-conversion-strategy.md).
+
 ## Lessons Learned
 
 1. The existing code can convert selected fixtures, but it is renderer-coupled and regression-driven.
 2. Do not add more file-specific SVG path fixes. Fix the interpreter, graphics state, document model, or renderer instead.
-3. Keep binary EPS and Ghostscript removal out of the first milestone unless they block ASCII interpreter work.
+3. Binary DOS EPS goes through `BinaryEpsConverter` only; Ghostscript was removed. Unsupported binary files error out.
 4. Use Maven for builds and tests.
 
 ## Basic Handoff Steps
