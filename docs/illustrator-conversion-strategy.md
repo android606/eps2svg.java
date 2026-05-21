@@ -8,15 +8,15 @@ execution path first and only narrows scope when the VM cannot run further.
 ## Tier order (Adobe Illustrator EPS)
 
 1. **Full embedded PostScript** (`runFullPostScript`)
-   - Execute the entire file: AGM procsets, setup, page body, trailer.
-   - Uses `PostScriptVm.executeAllLenient` so partial AGM support still records paths.
-   - Goal: eventual full AGM compatibility without a separate page-body shortcut.
+   - Run AGM prolog leniently (partial operator support).
+   - `PostScriptVm.resetForPageBody()` clears operand/graphics/dict stacks before the page.
+   - Reinforce file `ldf` shorthand aliases, then run the sanitized page body (trailer skipped).
+   - Goal: extend lenient prolog until trailer/AGM cleanup can run without losing paths.
 
 2. **Prolog then page body** (`runPrologThenPageBody`)
-   - Execute from `%!PS` through `%%EndPageSetup` / `%%EndSetup`, then the page slice in the same VM.
-   - Shorthand operators (`mo`, `lw`, `@`, …) come from the file prolog, not a static table.
+   - Same execution path as tier 1 (prolog lenient, reset VM, shorthand preamble, page body).
 
-3. **Page body + shorthand preamble** (`runPageBody`)
+3. **Page body + shorthand preamble** (`runPageBody`) — fallback only
    - Extract page content only.
    - Build preamble from prolog `ldf` lines (`/short /long ldf`) where `long` maps to a VM operator.
    - Merge with static fallbacks in `AdobeIllustratorShorthand` for operators not found in the file.

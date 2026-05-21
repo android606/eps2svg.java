@@ -40,49 +40,49 @@ final class AdobeIllustratorPageRunner {
     }
 
     /**
-     * Tier 1: execute the entire embedded PostScript (prolog, page, trailer).
-     * Lenient mode continues past unimplemented AGM operators until the VM is complete.
+     * Tier 1: execute prolog (lenient), reinforce file shorthands, then page body (lenient).
+     * Trailer/terminate sections are skipped so AGM cleanup does not erase recorded paths.
+     * Files without a page marker run the entire program leniently.
      */
     static EpsDocument runFullPostScript(String postScript, BoundingBox boundingBox) {
-        PostScriptVm vm = newPostScriptVm(boundingBox, isIllustratorYDownPage(boundingBox));
-        try (PostScriptLexer lexer = new PostScriptLexer(new StringReader(postScript))) {
-            List<PsValue> tokens = new PostScriptParser().parseAll(lexer);
-            vm.executeAllLenient(tokens);
-        } catch (Exception e) {
-            logger.log(Level.FINE, "Full PostScript execution failed: {0}", e.getMessage());
+        int pageStart = findPageBodyStart(postScript);
+        if (pageStart < 0) {
+            return runProgramLenient(postScript, boundingBox, "full PostScript");
+        }
+
+        String pageBody = extractPageBody(postScript);
+        if (pageBody == null || pageBody.isEmpty()) {
             return null;
+        }
+
+        PostScriptVm vm = newPostScriptVm(boundingBox, isIllustratorYDownPage(boundingBox));
+        String prolog = postScript.substring(0, pageStart);
+        try {
+            executeProgram(vm, prolog, true);
+        } catch (Exception e) {
+            logger.log(Level.FINE, "Prolog execution error (continuing): {0}", e.getMessage());
+        }
+        vm.resetForPageBody();
+        try {
+            executeProgram(vm, buildShorthandPreamble(postScript) + "end\n", true);
+            executeProgram(vm, pageBody + "\nend\n", false);
+        } catch (Exception e) {
+            logger.log(Level.FINE, "Page execution strict failed, retrying lenient: {0}", e.getMessage());
+            try {
+                executeProgram(vm, pageBody + "\nend\n", true);
+            } catch (Exception e2) {
+                logger.log(Level.FINE, "Page execution lenient failed: {0}", e2.getMessage());
+                return null;
+            }
         }
         return documentOrNull(vm, "full PostScript");
     }
 
     /**
-     * Tier 2: execute prolog through page setup, then the page body in the same VM.
+     * Tier 2: execute prolog through page setup, reinforce shorthands, then page body.
      */
     static EpsDocument runPrologThenPageBody(String postScript, BoundingBox boundingBox) {
-        String pageBody = extractPageBody(postScript);
-        if (pageBody == null || pageBody.isEmpty()) {
-            return null;
-        }
-        int pageStart = findPageBodyStart(postScript);
-        if (pageStart < 0) {
-            return null;
-        }
-        String prolog = postScript.substring(0, pageStart);
-
-        PostScriptVm vm = newPostScriptVm(boundingBox, isIllustratorYDownPage(boundingBox));
-        try {
-            try (PostScriptLexer lexer = new PostScriptLexer(new StringReader(prolog))) {
-                vm.executeAllLenient(new PostScriptParser().parseAll(lexer));
-            }
-            String pageProgram = pageBody + "\n";
-            try (PostScriptLexer lexer = new PostScriptLexer(new StringReader(pageProgram))) {
-                vm.executeAllLenient(new PostScriptParser().parseAll(lexer));
-            }
-        } catch (Exception e) {
-            logger.log(Level.FINE, "Prolog+page execution failed: {0}", e.getMessage());
-            return null;
-        }
-        return documentOrNull(vm, "prolog+page");
+        return runFullPostScript(postScript, boundingBox);
     }
 
     /**
@@ -173,6 +173,29 @@ final class AdobeIllustratorPageRunner {
                 "(?m)^1\\s+-1\\s+scale\\s+0\\s+-?[\\d.]+(?:[eE][+-]?\\d+)?\\s+translate\\s*\\r?\\n?",
                 "");
         return body;
+    }
+
+    private static EpsDocument runProgramLenient(
+            String program, BoundingBox boundingBox, String tierLabel) {
+        PostScriptVm vm = newPostScriptVm(boundingBox, isIllustratorYDownPage(boundingBox));
+        try {
+            executeProgram(vm, program, true);
+        } catch (Exception e) {
+            logger.log(Level.FINE, "{0} failed: {1}", new Object[] {tierLabel, e.getMessage()});
+            return null;
+        }
+        return documentOrNull(vm, tierLabel);
+    }
+
+    private static void executeProgram(PostScriptVm vm, String program, boolean lenient) throws Exception {
+        try (PostScriptLexer lexer = new PostScriptLexer(new StringReader(program))) {
+            List<PsValue> tokens = new PostScriptParser().parseAll(lexer);
+            if (lenient) {
+                vm.executeAllLenient(tokens);
+            } else {
+                vm.executeAll(tokens);
+            }
+        }
     }
 
     private static PostScriptVm newPostScriptVm(BoundingBox boundingBox, boolean illustratorYDown) {

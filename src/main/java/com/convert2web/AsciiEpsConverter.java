@@ -45,6 +45,12 @@ public final class AsciiEpsConverter {
             }
         }
 
+        EpsDocument fullVm = AdobeIllustratorPageRunner.runFullPostScript(
+                fullText, header.boundingBox);
+        if (fullVm != null && !fullVm.getCommands().isEmpty()) {
+            return applyHiResBoundingBox(fullVm, header);
+        }
+
         StringBuilder body = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                 new java.io.FileInputStream(inputEpsPath), StandardCharsets.ISO_8859_1))) {

@@ -123,6 +123,19 @@ public final class PostScriptVm {
         return operandStack;
     }
 
+    /**
+     * Resets operand/graphics stacks and collapses the dict stack to initial global+userdict
+     * before running the shorthand preamble and page body.
+     */
+    public void resetForPageBody() {
+        operandStack.clear();
+        graphicsStack.clear();
+        graphicsState = new VmGraphicsState();
+        while (dictStack.size() > 2) {
+            dictStack.pop();
+        }
+    }
+
     public EpsDocumentBuilder getDocumentBuilder() {
         return documentBuilder;
     }
