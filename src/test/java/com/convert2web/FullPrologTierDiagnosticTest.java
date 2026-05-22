@@ -107,7 +107,7 @@ class FullPrologTierDiagnosticTest {
     }
 
     private static EpsDocument runAsciiFull(String ps, BoundingBox bbox) {
-        return AdobeIllustratorPageRunner.runFullPostScript(ps, bbox);
+        return AdobeIllustratorPageRunner.runFullPostScript(ps, bbox, false);
     }
 
     private static boolean hasPaths(EpsDocument d) {

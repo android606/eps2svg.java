@@ -3,7 +3,6 @@ package com.convert2web.render;
 import com.convert2web.model.BoundingBox;
 import com.convert2web.model.EpsDocument;
 import com.convert2web.model.EpsDocumentBuilder;
-import com.convert2web.model.GraphicsCommand;
 import com.convert2web.model.Matrix;
 import com.convert2web.model.PaintStyle;
 import com.convert2web.model.Path;
@@ -130,9 +129,67 @@ class SvgRendererTest {
 
         String svg = new SvgRenderer().render(document);
 
-        assertTrue(svg.contains("viewBox=\"0 0 72 23\""));
-        assertTrue(svg.contains("translate(0,23) scale(1,-1) translate(-270,-384)"));
+        assertTrue(svg.contains("viewBox=\"0 0 50 10\""));
+        assertTrue(svg.contains("translate(0,10) scale(1,-1) translate(-280,-390)"));
         assertTrue(svg.contains("M280 390"));
+    }
+
+    @Test
+    void visibleBoundsIgnoreWhitePageBackground() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 612, 792))
+                .addFill(
+                        new Path(List.of(
+                                new PathSegment.MoveTo(0, 0),
+                                new PathSegment.LineTo(612, 0),
+                                new PathSegment.LineTo(612, 792),
+                                new PathSegment.LineTo(0, 792),
+                                new PathSegment.Close())),
+                        PaintStyle.rgb(1, 1, 1),
+                        WindingRule.NON_ZERO,
+                        Matrix.identity())
+                .addFill(
+                        new Path(List.of(
+                                new PathSegment.MoveTo(20, 700),
+                                new PathSegment.LineTo(70, 700),
+                                new PathSegment.LineTo(70, 740),
+                                new PathSegment.Close())),
+                        PaintStyle.rgb(1, 0, 0),
+                        WindingRule.NON_ZERO,
+                        Matrix.identity())
+                .build();
+
+        String svg = new SvgRenderer().render(document);
+
+        assertTrue(svg.contains("width=\"50\""));
+        assertTrue(svg.contains("height=\"40\""));
+        assertTrue(svg.contains("viewBox=\"0 0 50 40\""));
+        assertTrue(svg.contains("translate(0,40) scale(1,-1) translate(-20,-700)"));
+    }
+
+    @Test
+    void rendersRasterPlaceholderPattern() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 128, 160))
+                .addFill(
+                        new Path(List.of(
+                                new PathSegment.MoveTo(0, 0),
+                                new PathSegment.LineTo(128, 0),
+                                new PathSegment.LineTo(128, 160),
+                                new PathSegment.Close())),
+                        PaintStyle.rgb(1, 1, 1),
+                        WindingRule.NON_ZERO,
+                        Matrix.identity())
+                .addRasterPlaceholder(new BoundingBox(10, 20, 118, 140), Matrix.identity())
+                .build();
+
+        String svg = new SvgRenderer().render(document);
+
+        assertTrue(svg.contains("id=\"raster-placeholder-hatch\""));
+        assertTrue(svg.contains("Raster region (placeholder)"));
+        assertTrue(svg.contains("stroke-dasharray=\"4 3\""));
+        assertTrue(svg.contains("width=\"108\""));
+        assertTrue(svg.contains("height=\"120\""));
     }
 
     private static String renderSampleFill() {

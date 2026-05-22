@@ -19,11 +19,14 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /**
  * Converts ASCII EPS via lexer/parser/VM and {@link SvgRenderer}.
  */
 public final class AsciiEpsConverter {
+    private static final Logger logger = Logger.getLogger(AsciiEpsConverter.class.getName());
+
     private final SvgRenderer svgRenderer = new SvgRenderer();
 
     public EpsDocument convertToDocument(String inputEpsPath) throws IOException {
@@ -32,6 +35,7 @@ public final class AsciiEpsConverter {
         if (GhostscriptEpsPageRunner.isGhostscriptEps(fullText)) {
             EpsDocument ghostscript = tryGhostscriptPage(inputEpsPath, header, fullText);
             if (ghostscript != null) {
+                logger.info("ASCII path: Ghostscript EPS page");
                 return ghostscript;
             }
             throw new IOException("Ghostscript EPS page stream could not be converted to vector graphics");
@@ -41,13 +45,15 @@ public final class AsciiEpsConverter {
             EpsDocument adobe = AdobeIllustratorPageRunner.convertIllustratorPostScript(
                     fullText, header.boundingBox);
             if (adobe != null) {
+                logger.info("ASCII path: Adobe Illustrator (see Illustrator path log)");
                 return applyHiResBoundingBox(adobe, header);
             }
         }
 
         EpsDocument fullVm = AdobeIllustratorPageRunner.runFullPostScript(
-                fullText, header.boundingBox);
+                fullText, header.boundingBox, false);
         if (fullVm != null && !fullVm.getCommands().isEmpty()) {
+            logger.info("ASCII path: full PostScript (non-Illustrator)");
             return applyHiResBoundingBox(fullVm, header);
         }
 
@@ -104,6 +110,7 @@ public final class AsciiEpsConverter {
                 }
             }
         }
+        logger.info("ASCII path: body-only VM");
         return vm.getDocument();
     }
 

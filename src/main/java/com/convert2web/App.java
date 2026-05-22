@@ -42,12 +42,17 @@ public class App {
             System.out.println("Conversion completed successfully.");
         } catch (IOException e) {
             System.err.println("Conversion failed: " + e.getMessage());
-            e.printStackTrace();
+            if (!e.getMessage().startsWith("Not an EPS file:")) {
+                e.printStackTrace();
+            }
             System.exit(1);
         }
     }
 
     private static void configureLogger() {
+        if (System.getProperty("java.util.logging.config.file") != null) {
+            return;
+        }
         Logger rootLogger = Logger.getLogger("");
         rootLogger.setLevel(Level.INFO);
 

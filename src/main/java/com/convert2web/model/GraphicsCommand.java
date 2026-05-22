@@ -7,7 +7,8 @@ public abstract class GraphicsCommand {
     public enum Kind {
         FILL,
         STROKE,
-        CLIP
+        CLIP,
+        RASTER_PLACEHOLDER
     }
 
     private final Matrix ctm;
@@ -79,6 +80,27 @@ public abstract class GraphicsCommand {
         @Override
         public Kind getKind() {
             return Kind.STROKE;
+        }
+    }
+
+    /**
+     * Marks a region where Illustrator pattern paint used an embedded raster tile.
+     */
+    public static final class RasterPlaceholder extends GraphicsCommand {
+        private final BoundingBox region;
+
+        public RasterPlaceholder(BoundingBox region, Matrix ctm) {
+            super(ctm);
+            this.region = region;
+        }
+
+        public BoundingBox getRegion() {
+            return region;
+        }
+
+        @Override
+        public Kind getKind() {
+            return Kind.RASTER_PLACEHOLDER;
         }
     }
 

@@ -91,11 +91,11 @@ public final class PostScriptParser {
             List<PsValue> target) throws IOException {
         while (true) {
             PostScriptToken token = lexer.nextToken();
-            if (token.getType() == endType) {
-                return;
-            }
             if (token.getType() == PostScriptTokenType.EOF) {
                 throw new PostScriptParseException("Unterminated composite object, expected " + endType);
+            }
+            if (token.getType() == endType) {
+                return;
             }
             lexer.pushBack(token);
             target.add(parseObject(lexer));

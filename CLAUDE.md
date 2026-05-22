@@ -8,6 +8,8 @@ Read [docs/ascii-eps-interpreter-plan.md](docs/ascii-eps-interpreter-plan.md) be
 
 Illustrator EPS uses a three-tier pipeline (full prolog, prolog+page, page+shorthand). See [docs/illustrator-conversion-strategy.md](docs/illustrator-conversion-strategy.md).
 
+All-the-DITA batch failure analysis: [docs/all-the-dita-failures-analysis.md](docs/all-the-dita-failures-analysis.md).
+
 ## Lessons Learned
 
 1. The existing code can convert selected fixtures, but it is renderer-coupled and regression-driven.

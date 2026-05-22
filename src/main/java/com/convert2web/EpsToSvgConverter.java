@@ -27,7 +27,9 @@ public class EpsToSvgConverter {
             System.out.println("Conversion successful: " + outputFile);
         } catch (IOException e) {
             System.err.println("Conversion failed: " + e.getMessage());
-            e.printStackTrace();
+            if (!e.getMessage().startsWith("Not an EPS file:")) {
+                e.printStackTrace();
+            }
             System.exit(1);
         }
     }
@@ -38,6 +40,13 @@ public class EpsToSvgConverter {
         File inputFile = new File(inputPath);
         if (!inputFile.exists() || !inputFile.isFile()) {
             throw new IOException("Input file does not exist: " + inputPath);
+        }
+
+        try {
+            EpsFormatDetector.validateEpsFile(inputPath);
+        } catch (IOException e) {
+            logger.info("Conversion path: rejected (" + e.getMessage() + ")");
+            throw e;
         }
 
         boolean isBinaryEps = BinaryEpsInterpreter.isBinaryEps(inputPath);

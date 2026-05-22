@@ -88,6 +88,16 @@ class PostScriptParserTest {
         assertThrows(PostScriptParseException.class, () -> parseOne("<< 1 2 >>"));
     }
 
+    @Test
+    void parseProcedureWithDictionaryContainingArray() throws Exception {
+        PsValue.ProcedureValue proc = (PsValue.ProcedureValue) parseOne(
+                "{ << /a [ 1 2 ] >> moveto }");
+
+        assertEquals(2, proc.getBody().size());
+        assertInstanceOf(PsValue.DictionaryValue.class, proc.getBody().get(0));
+        assertEquals(PsValue.NameValue.executable("moveto"), proc.getBody().get(1));
+    }
+
     private static List<PsValue> parseAll(String input) throws Exception {
         try (PostScriptLexer lexer = new PostScriptLexer(new StringReader(input))) {
             return new PostScriptParser().parseAll(lexer);

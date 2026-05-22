@@ -54,6 +54,11 @@ public final class EpsDocumentBuilder {
         return this;
     }
 
+    public EpsDocumentBuilder addRasterPlaceholder(BoundingBox region, Matrix ctm) {
+        commands.add(new GraphicsCommand.RasterPlaceholder(region, ctm));
+        return this;
+    }
+
     public EpsDocument build() {
         if (boundingBox == null) {
             boundingBox = new BoundingBox(0, 0, 100, 100);

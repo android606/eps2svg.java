@@ -27,4 +27,14 @@ class AsciiEpsConverterTest {
         assertTrue(svg.contains("fill=\"rgb(255,0,0)\""));
         assertTrue(svg.contains("<path d=\""));
     }
+
+    @Test
+    void arrowUpEpsUsesSvgYFlip() throws Exception {
+        Path input = Path.of("test/test_images/arrow_up.eps");
+        String svg = new SvgRenderer().render(new AsciiEpsConverter().convertToDocument(input.toString()));
+
+        assertTrue(svg.contains("scale(1,-1)"), "plain EPS with zero-origin bbox still needs Y-flip");
+        assertTrue(svg.contains("translate(0,100) scale(1,-1)"));
+        assertTrue(svg.contains("L50 80"), "path stays in EPS coords; page group applies the flip");
+    }
 }

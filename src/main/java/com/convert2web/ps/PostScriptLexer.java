@@ -79,6 +79,9 @@ public final class PostScriptLexer implements AutoCloseable {
                 read();
                 return new PostScriptToken(PostScriptTokenType.DICTIONARY_START, "<<", startLine, startColumn);
             }
+            if (peek() == '~') {
+                return readAscii85String(startLine, startColumn);
+            }
             return readHexString(startLine, startColumn);
         }
         if (ch == '>') {
@@ -246,6 +249,28 @@ public final class PostScriptLexer implements AutoCloseable {
         }
         read();
         return new PostScriptToken(PostScriptTokenType.HEX_STRING, sb.toString(), startLine, startColumn);
+    }
+
+    private PostScriptToken readAscii85String(int startLine, int startColumn) throws IOException {
+        read(); // ~
+        StringBuilder sb = new StringBuilder();
+        while (true) {
+            int ch = peek();
+            if (ch == -1) {
+                throw syntaxError("Unterminated ASCII85 string");
+            }
+            if (ch == '~') {
+                read();
+                if (peek() == '>') {
+                    read();
+                    break;
+                }
+                sb.append('~');
+                continue;
+            }
+            sb.append((char) read());
+        }
+        return new PostScriptToken(PostScriptTokenType.STRING, sb.toString(), startLine, startColumn);
     }
 
     private String readName() throws IOException {

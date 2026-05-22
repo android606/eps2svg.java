@@ -42,6 +42,15 @@ class PostScriptLexerTest {
     }
 
     @Test
+    void tokenizesAscii85String() throws Exception {
+        List<PostScriptToken> tokens = lex("<~Artifex~> 10");
+
+        assertEquals(PostScriptTokenType.STRING, tokens.get(0).getType());
+        assertEquals("Artifex", tokens.get(0).getText());
+        assertEquals(PostScriptTokenType.INTEGER, tokens.get(1).getType());
+    }
+
+    @Test
     void tokenizesHexStringAndArrays() throws Exception {
         List<PostScriptToken> tokens = lex("<4142> [ 1 2 ]");
 

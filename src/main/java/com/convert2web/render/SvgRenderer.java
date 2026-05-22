@@ -6,6 +6,7 @@ import com.convert2web.model.GraphicsCommand;
 import com.convert2web.model.Matrix;
 import com.convert2web.model.PaintStyle;
 import com.convert2web.model.Path;
+import com.convert2web.model.PathBounds;
 import com.convert2web.model.StrokeStyle;
 import com.convert2web.model.WindingRule;
 
@@ -21,13 +22,14 @@ import java.util.Deque;
  */
 public final class SvgRenderer {
     private static final String SVG_NS = "http://www.w3.org/2000/svg";
+    private static final String RASTER_PLACEHOLDER_PATTERN_ID = "raster-placeholder-hatch";
 
     public String render(EpsDocument document) {
-        BoundingBox bbox = document.getBoundingBox();
-        double llx = bbox.getLlx();
-        double lly = bbox.getLly();
-        double width = bbox.getWidth();
-        double height = bbox.getHeight();
+        BoundingBox viewport = visibleViewport(document);
+        double llx = viewport.getLlx();
+        double lly = viewport.getLly();
+        double width = viewport.getWidth();
+        double height = viewport.getHeight();
         if (width <= 0 || height <= 0) {
             width = 100;
             height = 100;
@@ -41,8 +43,12 @@ public final class SvgRenderer {
         StringBuilder body = new StringBuilder();
         Deque<String> clipIds = new ArrayDeque<>();
         int clipCounter = 0;
+        boolean rasterPlaceholderPattern = false;
 
         for (GraphicsCommand command : document.getCommands()) {
+            if (command instanceof GraphicsCommand.RasterPlaceholder) {
+                rasterPlaceholderPattern = true;
+            }
             if (command instanceof GraphicsCommand.Clip) {
                 GraphicsCommand.Clip clip = (GraphicsCommand.Clip) command;
                 String clipId = "clip" + clipCounter++;
@@ -52,6 +58,10 @@ public final class SvgRenderer {
                 continue;
             }
             body.append(renderPaintCommand(command));
+        }
+
+        if (rasterPlaceholderPattern) {
+            appendRasterPlaceholderPatternDef(defs);
         }
 
         while (!clipIds.isEmpty()) {
@@ -117,7 +127,193 @@ public final class SvgRenderer {
             return pathElement(stroke.getPath(), transform, paintAttrs(stroke.getStrokeColor(), false)
                     + strokeAttrs(stroke.getStrokeStyle()));
         }
+        if (command instanceof GraphicsCommand.RasterPlaceholder) {
+            GraphicsCommand.RasterPlaceholder placeholder = (GraphicsCommand.RasterPlaceholder) command;
+            return rasterPlaceholderElement(placeholder, transform);
+        }
         return "";
+    }
+
+    private static void appendRasterPlaceholderPatternDef(StringBuilder defs) {
+        defs.append("<pattern id=\"").append(RASTER_PLACEHOLDER_PATTERN_ID).append("\"");
+        defs.append(" patternUnits=\"userSpaceOnUse\" width=\"8\" height=\"8\"");
+        defs.append(" patternTransform=\"rotate(45)\">\n");
+        defs.append("  <line x1=\"0\" y1=\"0\" x2=\"0\" y2=\"8\" stroke=\"#999\" stroke-width=\"1\"/>\n");
+        defs.append("</pattern>\n");
+    }
+
+    private static String rasterPlaceholderElement(
+            GraphicsCommand.RasterPlaceholder placeholder, String transform) {
+        BoundingBox region = placeholder.getRegion();
+        double x = region.getLlx();
+        double y = region.getLly();
+        double w = region.getWidth();
+        double h = region.getHeight();
+        StringBuilder element = new StringBuilder();
+        element.append("<g");
+        if (!transform.isEmpty()) {
+            element.append(" transform=\"").append(escapeAttr(transform)).append('"');
+        }
+        element.append(">\n  <rect x=\"").append(SvgPathEncoder.format(x)).append('"');
+        element.append(" y=\"").append(SvgPathEncoder.format(y)).append('"');
+        element.append(" width=\"").append(SvgPathEncoder.format(w)).append('"');
+        element.append(" height=\"").append(SvgPathEncoder.format(h)).append('"');
+        element.append(" fill=\"url(#").append(RASTER_PLACEHOLDER_PATTERN_ID).append(")\"");
+        element.append(" fill-opacity=\"0.35\"");
+        element.append(" stroke=\"#666\" stroke-width=\"0.75\" stroke-dasharray=\"4 3\"");
+        element.append(">\n    <title>Raster region (placeholder)</title>\n  </rect>\n</g>\n");
+        return element.toString();
+    }
+
+    private static BoundingBox visibleViewport(EpsDocument document) {
+        Bounds preferred = new Bounds();
+        Bounds fallbackPaint = new Bounds();
+        Bounds page = Bounds.from(document.getBoundingBox());
+        Bounds activeClip = page.copy();
+        for (GraphicsCommand command : document.getCommands()) {
+            if (command instanceof GraphicsCommand.Clip) {
+                GraphicsCommand.Clip clip = (GraphicsCommand.Clip) command;
+                activeClip.intersect(Bounds.from(
+                        PathBounds.transformedBounds(clip.getPath(), command.getCtm())));
+            } else if (command instanceof GraphicsCommand.Fill) {
+                GraphicsCommand.Fill fill = (GraphicsCommand.Fill) command;
+                double[] bounds = PathBounds.transformedBounds(fill.getPath(), command.getCtm());
+                bounds = page.clamp(activeClip.clamp(bounds));
+                fallbackPaint.include(bounds);
+                if (!isWhiteOrNone(fill.getFill())) {
+                    preferred.include(bounds);
+                }
+            } else if (command instanceof GraphicsCommand.Stroke) {
+                GraphicsCommand.Stroke stroke = (GraphicsCommand.Stroke) command;
+                double[] bounds = PathBounds.transformedBounds(stroke.getPath(), command.getCtm());
+                double pad = Math.max(0.5, stroke.getStrokeStyle().getLineWidth() / 2.0);
+                bounds = page.clamp(activeClip.clamp(bounds, pad));
+                fallbackPaint.include(bounds);
+                preferred.include(bounds);
+            } else if (command instanceof GraphicsCommand.RasterPlaceholder) {
+                GraphicsCommand.RasterPlaceholder placeholder = (GraphicsCommand.RasterPlaceholder) command;
+                BoundingBox region = placeholder.getRegion();
+                double[] bounds = new double[] {
+                        region.getLlx(), region.getLly(), region.getUrx(), region.getUry()
+                };
+                bounds = page.clamp(activeClip.clamp(bounds));
+                fallbackPaint.include(bounds);
+                preferred.include(bounds);
+            }
+        }
+        if (!preferred.isEmpty()) {
+            return preferred.toBoundingBox();
+        }
+        if (!fallbackPaint.isEmpty()) {
+            return fallbackPaint.toBoundingBox();
+        }
+        return document.getBoundingBox();
+    }
+
+    private static boolean isWhiteOrNone(PaintStyle paint) {
+        switch (paint.getKind()) {
+            case NONE:
+                return true;
+            case GRAY:
+                return paint.getV0() >= 0.99;
+            case RGB:
+                return paint.getV0() >= 0.99 && paint.getV1() >= 0.99 && paint.getV2() >= 0.99;
+            case CMYK:
+                return paint.getV0() <= 0.01 && paint.getV1() <= 0.01
+                        && paint.getV2() <= 0.01 && paint.getV3() <= 0.01;
+            default:
+                return false;
+        }
+    }
+
+    private static final class Bounds {
+        private double minX = Double.POSITIVE_INFINITY;
+        private double minY = Double.POSITIVE_INFINITY;
+        private double maxX = Double.NEGATIVE_INFINITY;
+        private double maxY = Double.NEGATIVE_INFINITY;
+
+        void include(double[] bounds) {
+            include(bounds, 0);
+        }
+
+        void include(double[] bounds, double padding) {
+            if (bounds == null || bounds.length < 4 || bounds[2] <= bounds[0] || bounds[3] <= bounds[1]) {
+                return;
+            }
+            minX = Math.min(minX, bounds[0] - padding);
+            minY = Math.min(minY, bounds[1] - padding);
+            maxX = Math.max(maxX, bounds[2] + padding);
+            maxY = Math.max(maxY, bounds[3] + padding);
+        }
+
+        boolean isEmpty() {
+            return minX == Double.POSITIVE_INFINITY;
+        }
+
+        BoundingBox toBoundingBox() {
+            return new BoundingBox(minX, minY, maxX, maxY);
+        }
+
+        static Bounds from(BoundingBox bbox) {
+            Bounds bounds = new Bounds();
+            if (bbox != null) {
+                bounds.include(new double[] {bbox.getLlx(), bbox.getLly(), bbox.getUrx(), bbox.getUry()});
+            }
+            return bounds;
+        }
+
+        static Bounds from(double[] values) {
+            Bounds bounds = new Bounds();
+            bounds.include(values);
+            return bounds;
+        }
+
+        Bounds copy() {
+            Bounds copy = new Bounds();
+            copy.minX = minX;
+            copy.minY = minY;
+            copy.maxX = maxX;
+            copy.maxY = maxY;
+            return copy;
+        }
+
+        void intersect(Bounds other) {
+            if (isEmpty() || other.isEmpty()) {
+                minX = Double.POSITIVE_INFINITY;
+                minY = Double.POSITIVE_INFINITY;
+                maxX = Double.NEGATIVE_INFINITY;
+                maxY = Double.NEGATIVE_INFINITY;
+                return;
+            }
+            minX = Math.max(minX, other.minX);
+            minY = Math.max(minY, other.minY);
+            maxX = Math.min(maxX, other.maxX);
+            maxY = Math.min(maxY, other.maxY);
+            if (maxX <= minX || maxY <= minY) {
+                minX = Double.POSITIVE_INFINITY;
+                minY = Double.POSITIVE_INFINITY;
+                maxX = Double.NEGATIVE_INFINITY;
+                maxY = Double.NEGATIVE_INFINITY;
+            }
+        }
+
+        double[] clamp(double[] values) {
+            return clamp(values, 0);
+        }
+
+        double[] clamp(double[] values, double padding) {
+            if (isEmpty() || values == null || values.length < 4) {
+                return values;
+            }
+            double x0 = Math.max(minX, values[0] - padding);
+            double y0 = Math.max(minY, values[1] - padding);
+            double x1 = Math.min(maxX, values[2] + padding);
+            double y1 = Math.min(maxY, values[3] + padding);
+            if (x1 <= x0 || y1 <= y0) {
+                return new double[] {0, 0, 0, 0};
+            }
+            return new double[] {x0, y0, x1, y1};
+        }
     }
 
     private static String pathElement(Path path, String transform, String paintAttributes) {
