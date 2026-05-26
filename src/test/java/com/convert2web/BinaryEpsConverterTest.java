@@ -27,9 +27,9 @@ class BinaryEpsConverterTest {
     }
 
     @Test
-    void convertsManufacturedByBinaryToVectorSvg() throws Exception {
-        Path input = Path.of("test/test_images/manufactured_by-binary.eps");
-        Path output = Files.createTempFile("manufactured-by-binary", ".svg");
+    void convertsEcRepBinaryToVectorSvg() throws Exception {
+        Path input = Path.of("test/test_images/ec_rep-binary.eps");
+        Path output = Files.createTempFile("ec-rep-binary", ".svg");
         try {
             assertTrue(new BinaryEpsConverter().tryConvert(input.toString(), output.toString()));
             String svg = Files.readString(output);

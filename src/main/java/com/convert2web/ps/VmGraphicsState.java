@@ -25,6 +25,7 @@ public final class VmGraphicsState {
     private double currentY;
     private boolean hasCurrentPoint;
     private int compoundPathDepth;
+    private int clipDepth;
 
     public VmGraphicsState copy() {
         VmGraphicsState copy = new VmGraphicsState();
@@ -40,6 +41,7 @@ public final class VmGraphicsState {
         copy.currentY = currentY;
         copy.hasCurrentPoint = hasCurrentPoint;
         copy.compoundPathDepth = compoundPathDepth;
+        copy.clipDepth = clipDepth;
         return copy;
     }
 
@@ -55,6 +57,14 @@ public final class VmGraphicsState {
 
     public boolean isInCompoundPath() {
         return compoundPathDepth > 0;
+    }
+
+    public int getClipDepth() {
+        return clipDepth;
+    }
+
+    public void incrementClipDepth() {
+        clipDepth++;
     }
 
     public Matrix getCtm() {
@@ -124,6 +134,13 @@ public final class VmGraphicsState {
     public void clearPath() {
         pathSegments.clear();
         hasCurrentPoint = false;
+    }
+
+    /** Drops a lone {@code moveto} left for text positioning so it is not painted later. */
+    public void clearIfOnlyMoveToPath() {
+        if (pathSegments.size() == 1 && pathSegments.get(0) instanceof PathSegment.MoveTo) {
+            clearPath();
+        }
     }
 
     public Path snapshotPath() {

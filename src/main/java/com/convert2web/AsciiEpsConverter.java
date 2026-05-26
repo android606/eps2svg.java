@@ -7,6 +7,7 @@ import com.convert2web.ps.PostScriptParser;
 import com.convert2web.ps.PostScriptVm;
 import com.convert2web.ps.PostScriptVmException;
 import com.convert2web.ps.PsValue;
+import com.convert2web.render.SvgRenderOptions;
 import com.convert2web.render.SvgRenderer;
 
 import java.io.BufferedReader;
@@ -27,7 +28,15 @@ import java.util.logging.Logger;
 public final class AsciiEpsConverter {
     private static final Logger logger = Logger.getLogger(AsciiEpsConverter.class.getName());
 
-    private final SvgRenderer svgRenderer = new SvgRenderer();
+    private final SvgRenderer svgRenderer;
+
+    public AsciiEpsConverter() {
+        this(SvgRenderOptions.none());
+    }
+
+    public AsciiEpsConverter(SvgRenderOptions renderOptions) {
+        this.svgRenderer = new SvgRenderer(renderOptions);
+    }
 
     public EpsDocument convertToDocument(String inputEpsPath) throws IOException {
         EpsHeader header = readHeader(inputEpsPath);

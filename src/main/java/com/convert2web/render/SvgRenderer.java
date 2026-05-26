@@ -15,7 +15,9 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayDeque;
+import java.util.Base64;
 import java.util.Deque;
+import java.util.List;
 
 /**
  * Renders {@link EpsDocument} to SVG XML without depending on Batik.
@@ -23,6 +25,33 @@ import java.util.Deque;
 public final class SvgRenderer {
     private static final String SVG_NS = "http://www.w3.org/2000/svg";
     private static final String RASTER_PLACEHOLDER_PATTERN_ID = "raster-placeholder-hatch";
+
+    private static final class ClipFrame {
+        private final String id;
+        private boolean opened;
+
+        private ClipFrame(String id) {
+            this.id = id;
+        }
+    }
+
+    private static final class ElementIds {
+        private int next = 1;
+
+        private String next() {
+            return Integer.toString(next++);
+        }
+    }
+
+    private final SvgRenderOptions options;
+
+    public SvgRenderer() {
+        this(SvgRenderOptions.none());
+    }
+
+    public SvgRenderer(SvgRenderOptions options) {
+        this.options = options == null ? SvgRenderOptions.none() : options;
+    }
 
     public String render(EpsDocument document) {
         BoundingBox viewport = visibleViewport(document);
@@ -38,42 +67,94 @@ public final class SvgRenderer {
         }
 
         String pageTransform = pageTransform(document, llx, lly, height);
+        boolean deviceYDown = "false".equals(document.metadata().get("svg.pageYFlip"));
+        double pageUry = document.getBoundingBox().getUry();
 
         StringBuilder defs = new StringBuilder();
         StringBuilder body = new StringBuilder();
-        Deque<String> clipIds = new ArrayDeque<>();
-        int clipCounter = 0;
+        Deque<ClipFrame> clipFrames = new ArrayDeque<>();
+        Deque<String> layerGroupIds = new ArrayDeque<>();
+        ElementIds elementIds = new ElementIds();
+        String rootId = elementIds.next();
         boolean rasterPlaceholderPattern = false;
 
         for (GraphicsCommand command : document.getCommands()) {
             if (command instanceof GraphicsCommand.RasterPlaceholder) {
                 rasterPlaceholderPattern = true;
             }
-            if (command instanceof GraphicsCommand.Clip) {
-                GraphicsCommand.Clip clip = (GraphicsCommand.Clip) command;
-                String clipId = "clip" + clipCounter++;
-                appendClipPath(defs, clipId, clip);
-                clipIds.push(clipId);
-                body.append("<g clip-path=\"url(#").append(clipId).append(")\">\n");
+            if (command instanceof GraphicsCommand.BeginLayerGroup) {
+                GraphicsCommand.BeginLayerGroup group = (GraphicsCommand.BeginLayerGroup) command;
+                String layerId = sanitizeLayerId(group.getLayerId());
+                layerGroupIds.push(layerId);
+                body.append("<g id=\"").append(escapeAttr(elementIds.next())).append("\"");
+                body.append(" data-layer-id=\"").append(escapeAttr(layerId)).append("\">\n");
                 continue;
             }
-            body.append(renderPaintCommand(command));
+            if (command instanceof GraphicsCommand.EndLayerGroup) {
+                if (!layerGroupIds.isEmpty()) {
+                    body.append("</g>\n");
+                    layerGroupIds.pop();
+                }
+                continue;
+            }
+            if (command instanceof GraphicsCommand.Clip) {
+                GraphicsCommand.Clip clip = (GraphicsCommand.Clip) command;
+                String clipId = elementIds.next();
+                appendClipPath(defs, clipId, clip, elementIds);
+                clipFrames.push(new ClipFrame(clipId));
+                continue;
+            }
+            if (command instanceof GraphicsCommand.PopClip) {
+                if (!clipFrames.isEmpty()) {
+                    ClipFrame frame = clipFrames.pop();
+                    if (frame.opened) {
+                        body.append("</g>\n");
+                    }
+                }
+                continue;
+            }
+            if (command instanceof GraphicsCommand.EmbeddedImage) {
+                GraphicsCommand.EmbeddedImage embeddedImage =
+                        (GraphicsCommand.EmbeddedImage) command;
+                if (!embeddedImage.getClipStack().isEmpty()) {
+                String paint = embeddedImageElement(
+                        defs, embeddedImage, deviceYDown, pageUry, elementIds);
+                if (!paint.isEmpty()) {
+                    body.append(paint);
+                }
+                continue;
+                }
+            }
+            String paint = renderPaintCommand(command, deviceYDown, pageUry, elementIds);
+            if (!paint.isEmpty()) {
+                openPendingClips(body, clipFrames, elementIds);
+                body.append(paint);
+            }
         }
 
         if (rasterPlaceholderPattern) {
             appendRasterPlaceholderPatternDef(defs);
         }
 
-        while (!clipIds.isEmpty()) {
-            body.append("</g>\n");
-            clipIds.pop();
+        while (!clipFrames.isEmpty()) {
+            ClipFrame frame = clipFrames.pop();
+            if (frame.opened) {
+                body.append("</g>\n");
+            }
         }
+        while (!layerGroupIds.isEmpty()) {
+            body.append("</g>\n");
+            layerGroupIds.pop();
+        }
+
+        SvgDisplaySize displaySize = SvgDisplaySize.fromViewBox(width, height, options);
 
         StringBuilder svg = new StringBuilder();
         svg.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-        svg.append("<svg xmlns=\"").append(SVG_NS).append("\"");
-        svg.append(" width=\"").append(SvgPathEncoder.format(width)).append("\"");
-        svg.append(" height=\"").append(SvgPathEncoder.format(height)).append("\"");
+        svg.append("<svg id=\"").append(escapeAttr(rootId)).append("\"");
+        svg.append(" xmlns=\"").append(SVG_NS).append("\"");
+        svg.append(" width=\"").append(escapeAttr(displaySize.widthAttribute())).append("\"");
+        svg.append(" height=\"").append(escapeAttr(displaySize.heightAttribute())).append("\"");
         // viewBox is 0..size; page <g> maps EPS coords (llx,lly..urx,ury) into that space.
         svg.append(" viewBox=\"0 0 ")
                 .append(SvgPathEncoder.format(width)).append(' ')
@@ -81,15 +162,29 @@ public final class SvgRenderer {
         if (defs.length() > 0) {
             svg.append("<defs>\n").append(defs).append("</defs>\n");
         }
+        svg.append("<style>image{image-rendering:pixelated;}</style>\n");
         if (pageTransform.isEmpty()) {
             svg.append(body);
         } else {
-            svg.append("<g transform=\"").append(escapeAttr(pageTransform)).append("\">\n");
+            svg.append("<g id=\"").append(escapeAttr(elementIds.next())).append("\"");
+            svg.append(" transform=\"").append(escapeAttr(pageTransform)).append("\">\n");
             svg.append(body);
             svg.append("</g>\n");
         }
         svg.append("</svg>\n");
         return svg.toString();
+    }
+
+    private static void openPendingClips(
+            StringBuilder body, Deque<ClipFrame> clipFrames, ElementIds elementIds) {
+        for (java.util.Iterator<ClipFrame> iterator = clipFrames.descendingIterator(); iterator.hasNext();) {
+            ClipFrame frame = iterator.next();
+            if (!frame.opened) {
+                body.append("<g id=\"").append(escapeAttr(elementIds.next())).append("\"");
+                body.append(" clip-path=\"url(#").append(frame.id).append(")\">\n");
+                frame.opened = true;
+            }
+        }
     }
 
     public void write(EpsDocument document, java.nio.file.Path outputFile) throws IOException {
@@ -100,7 +195,8 @@ public final class SvgRenderer {
         writer.write(render(document));
     }
 
-    private static void appendClipPath(StringBuilder defs, String id, GraphicsCommand.Clip clip) {
+    private static void appendClipPath(
+            StringBuilder defs, String id, GraphicsCommand.Clip clip, ElementIds elementIds) {
         Matrix ctm = clip.getCtm();
         String d = ctm.equals(Matrix.identity())
                 ? SvgPathEncoder.toPathData(clip.getPath())
@@ -109,29 +205,248 @@ public final class SvgRenderer {
             return;
         }
         defs.append("<clipPath id=\"").append(id).append("\">\n");
-        defs.append("  <path d=\"").append(escapeAttr(d)).append("\"");
+        defs.append("  <path id=\"").append(escapeAttr(elementIds.next())).append("\"");
+        defs.append(" d=\"").append(escapeAttr(d)).append("\"");
         defs.append(" clip-rule=\"").append(windingRuleAttr(clip.getWindingRule())).append("\"/>\n");
         defs.append("</clipPath>\n");
     }
 
-    private static String renderPaintCommand(GraphicsCommand command) {
+    private static String renderPaintCommand(
+            GraphicsCommand command,
+            boolean deviceYDown,
+            double pageUry,
+            ElementIds elementIds) {
         Matrix ctm = command.getCtm();
         String transform = matrixTransform(ctm);
         if (command instanceof GraphicsCommand.Fill) {
             GraphicsCommand.Fill fill = (GraphicsCommand.Fill) command;
-            return pathElement(fill.getPath(), transform, paintAttrs(fill.getFill(), true)
+            return pathElement(fill.getPath(), transform, elementIds, paintAttrs(fill.getFill(), true)
                     + " fill-rule=\"" + windingRuleAttr(fill.getWindingRule()) + "\"");
         }
         if (command instanceof GraphicsCommand.Stroke) {
             GraphicsCommand.Stroke stroke = (GraphicsCommand.Stroke) command;
-            return pathElement(stroke.getPath(), transform, paintAttrs(stroke.getStrokeColor(), false)
+            return pathElement(stroke.getPath(), transform, elementIds, paintAttrs(stroke.getStrokeColor(), false)
                     + strokeAttrs(stroke.getStrokeStyle()));
         }
         if (command instanceof GraphicsCommand.RasterPlaceholder) {
             GraphicsCommand.RasterPlaceholder placeholder = (GraphicsCommand.RasterPlaceholder) command;
-            return rasterPlaceholderElement(placeholder, transform);
+            return rasterPlaceholderElement(placeholder, transform, elementIds);
+        }
+        if (command instanceof GraphicsCommand.EmbeddedImage) {
+            return embeddedImageElement(
+                    null, (GraphicsCommand.EmbeddedImage) command, deviceYDown, pageUry, elementIds);
+        }
+        if (command instanceof GraphicsCommand.Text) {
+            return textElement((GraphicsCommand.Text) command, transform, elementIds);
         }
         return "";
+    }
+
+    private static String textElement(GraphicsCommand.Text text, String transform, ElementIds elementIds) {
+        if (text.getText().isEmpty()) {
+            return "";
+        }
+        double fontSize = effectiveFontSize(text.getFontSize(), text.getCtm());
+        StringBuilder element = new StringBuilder();
+        if (!transform.isEmpty()) {
+            element.append("<g");
+            element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
+            element.append(" transform=\"").append(escapeAttr(transform)).append('"');
+            element.append(">\n  ");
+        }
+        element.append("<text");
+        element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
+        element.append(" x=\"").append(SvgPathEncoder.format(text.getX())).append('"');
+        element.append(" y=\"").append(SvgPathEncoder.format(text.getY())).append('"');
+        element.append(" font-size=\"").append(SvgPathEncoder.format(fontSize)).append('"');
+        element.append(" font-family=\"").append(escapeAttr(svgFontFamily(text.getFontName()))).append('"');
+        element.append(paintAttrs(text.getFill(), true));
+        element.append('>').append(escapeText(text.getText())).append("</text>");
+        if (!transform.isEmpty()) {
+            element.append("\n</g>");
+        }
+        element.append('\n');
+        return element.toString();
+    }
+
+    private static double effectiveFontSize(double fontSize, Matrix ctm) {
+        double sx = Math.hypot(ctm.getA(), ctm.getB());
+        double sy = Math.hypot(ctm.getC(), ctm.getD());
+        return fontSize * Math.max(sx, sy);
+    }
+
+    private static String svgFontFamily(String fontName) {
+        String name = fontName.startsWith("/") ? fontName.substring(1) : fontName;
+        if (name.contains("Helvetica") || name.contains("Arial")) {
+            return "Helvetica, Arial, sans-serif";
+        }
+        if (name.contains("Times")) {
+            return "Times New Roman, Times, serif";
+        }
+        if (name.contains("Courier")) {
+            return "Courier New, Courier, monospace";
+        }
+        return name + ", sans-serif";
+    }
+
+    /**
+     * Renders an AGM tile like Illustrator: intrinsic pixel size plus an affine transform.
+     * When {@code defs} is non-null and the image has a paint-time clip stack, clip paths are
+     * emitted in defs and referenced from the {@code <image>} element.
+     */
+    private static String embeddedImageElement(
+            StringBuilder defs,
+            GraphicsCommand.EmbeddedImage image,
+            boolean deviceYDown,
+            double pageUry,
+            ElementIds elementIds) {
+        if (image.getPngBytes().length == 0) {
+            return "";
+        }
+        int width = image.getWidth();
+        int height = image.getHeight();
+        if (width <= 0 || height <= 0) {
+            return "";
+        }
+        Matrix displayMatrix = embeddedImageTransformMatrix(
+                image.getCtm(), width, height, deviceYDown, pageUry);
+        if (!displayMatrix.equals(Matrix.identity()) && deviceYDown && height <= 1) {
+            double[] bounds = transformedImageBounds(image);
+            double svgY = bounds[1] > pageUry * 0.5 && bounds[3] < pageUry * 0.88
+                    ? pageUry - bounds[3]
+                    : bounds[1];
+            displayMatrix = new Matrix(
+                    displayMatrix.getA(),
+                    displayMatrix.getB(),
+                    displayMatrix.getC(),
+                    displayMatrix.getD(),
+                    displayMatrix.getE(),
+                    svgY);
+        }
+        String transform = matrixTransform(displayMatrix);
+        String base64 = Base64.getEncoder().encodeToString(image.getPngBytes());
+        StringBuilder element = new StringBuilder();
+        List<GraphicsCommand.Clip> clips = image.getClipStack();
+        if (defs != null && !clips.isEmpty()) {
+            for (int i = 0; i < clips.size() - 1; i++) {
+                String clipId = elementIds.next();
+                appendClipPath(defs, clipId, clips.get(i), elementIds);
+                element.append("<g id=\"").append(escapeAttr(elementIds.next())).append('"');
+                element.append(" clip-path=\"url(#").append(clipId).append(")\">\n");
+            }
+            String imageClipId = elementIds.next();
+            appendClipPath(defs, imageClipId, imageLocalClip(clips.get(clips.size() - 1), displayMatrix), elementIds);
+            element.append("<image");
+            element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
+            element.append(" clip-path=\"url(#").append(imageClipId).append(")\"");
+        } else {
+            element.append("<image");
+            element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
+        }
+        if (!transform.isEmpty()) {
+            element.append(" width=\"").append(width).append('"');
+            element.append(" height=\"").append(height).append('"');
+            element.append(" transform=\"").append(escapeAttr(transform)).append('"');
+        } else {
+            double[] bounds = transformedImageBounds(image);
+            double x = bounds[0];
+            double w = bounds[2] - bounds[0];
+            double h = bounds[3] - bounds[1];
+            double y = deviceYDown
+                    ? (bounds[1] > pageUry * 0.5 && bounds[3] < pageUry * 0.88
+                            ? pageUry - bounds[3]
+                            : bounds[1])
+                    : bounds[1];
+            if (w <= 0 || h <= 0) {
+                return "";
+            }
+            element.append(" x=\"").append(SvgPathEncoder.format(x)).append('"');
+            element.append(" y=\"").append(SvgPathEncoder.format(y)).append('"');
+            element.append(" width=\"").append(SvgPathEncoder.format(w)).append('"');
+            element.append(" height=\"").append(SvgPathEncoder.format(h)).append('"');
+            element.append(" preserveAspectRatio=\"none\"");
+        }
+        element.append(" href=\"data:image/png;base64,").append(base64).append("\"/>\n");
+        for (int i = 0; i < clips.size() - 1; i++) {
+            element.append("</g>\n");
+        }
+        return element.toString();
+    }
+
+    private static GraphicsCommand.Clip imageLocalClip(GraphicsCommand.Clip clip, Matrix displayMatrix) {
+        if (displayMatrix.equals(Matrix.identity())) {
+            return clip;
+        }
+        try {
+            Matrix localClipCtm = displayMatrix.invert().postConcat(clip.getCtm());
+            return new GraphicsCommand.Clip(clip.getPath(), clip.getWindingRule(), localClipCtm);
+        } catch (IllegalArgumentException ex) {
+            return clip;
+        }
+    }
+
+    /**
+     * Maps raster pixels to SVG user space (Illustrator-style), using the tile CTM from EPS.
+     */
+    private static Matrix embeddedImageTransformMatrix(
+            Matrix ctm, int width, int height, boolean deviceYDown, double pageUry) {
+        double[][] pixelCorners = {{0, 0}, {width, 0}, {0, height}, {width, height}};
+        double[][] corners = new double[4][2];
+        // Composed AGM CTMs already include [1 0 0 -1 0 pageHeight] when d < 0.
+        boolean ctmMapsToDeviceYDown = ctm.getD() < 0;
+        for (int i = 0; i < pixelCorners.length; i++) {
+            corners[i] = imagePixelToEps(ctm, width, height, pixelCorners[i][0], pixelCorners[i][1]);
+            if (deviceYDown && !ctmMapsToDeviceYDown) {
+                corners[i][1] = pageUry - corners[i][1];
+            }
+        }
+        int origin = 0;
+        for (int i = 1; i < corners.length; i++) {
+            if (corners[i][1] < corners[origin][1]
+                    || (corners[i][1] == corners[origin][1] && corners[i][0] < corners[origin][0])) {
+                origin = i;
+            }
+        }
+        int right = -1;
+        int down = -1;
+        for (int i = 0; i < corners.length; i++) {
+            if (i == origin) {
+                continue;
+            }
+            if (right < 0
+                    || Math.abs(corners[i][1] - corners[origin][1])
+                            < Math.abs(corners[right][1] - corners[origin][1])
+                    || (Math.abs(corners[i][1] - corners[origin][1])
+                                    == Math.abs(corners[right][1] - corners[origin][1])
+                            && corners[i][0] > corners[right][0])) {
+                right = i;
+            }
+            if (down < 0
+                    || Math.abs(corners[i][0] - corners[origin][0])
+                            < Math.abs(corners[down][0] - corners[origin][0])
+                    || (Math.abs(corners[i][0] - corners[origin][0])
+                                    == Math.abs(corners[down][0] - corners[origin][0])
+                            && corners[i][1] > corners[down][1])) {
+                down = i;
+            }
+        }
+        if (right < 0 || down < 0) {
+            return Matrix.identity();
+        }
+        double a = (corners[right][0] - corners[origin][0]) / width;
+        double b = (corners[right][1] - corners[origin][1]) / width;
+        double c = (corners[down][0] - corners[origin][0]) / height;
+        double d = (corners[down][1] - corners[origin][1]) / height;
+        if (!Double.isFinite(a) || !Double.isFinite(b) || !Double.isFinite(c) || !Double.isFinite(d)) {
+            return Matrix.identity();
+        }
+        return new Matrix(a, b, c, d, corners[origin][0], corners[origin][1]);
+    }
+
+    private static double[] imagePixelToEps(Matrix display, int width, int height, double px, double py) {
+        double u = px / width;
+        double v = 1.0 - py / height;
+        return new double[] {display.transformX(u, v), display.transformY(u, v)};
     }
 
     private static void appendRasterPlaceholderPatternDef(StringBuilder defs) {
@@ -143,42 +458,55 @@ public final class SvgRenderer {
     }
 
     private static String rasterPlaceholderElement(
-            GraphicsCommand.RasterPlaceholder placeholder, String transform) {
+            GraphicsCommand.RasterPlaceholder placeholder, String transform, ElementIds elementIds) {
         BoundingBox region = placeholder.getRegion();
         double x = region.getLlx();
         double y = region.getLly();
         double w = region.getWidth();
         double h = region.getHeight();
         StringBuilder element = new StringBuilder();
-        element.append("<g");
         if (!transform.isEmpty()) {
+            element.append("<g");
+            element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
             element.append(" transform=\"").append(escapeAttr(transform)).append('"');
+            element.append(">\n  ");
         }
-        element.append(">\n  <rect x=\"").append(SvgPathEncoder.format(x)).append('"');
+        element.append("<rect");
+        element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
+        element.append(" x=\"").append(SvgPathEncoder.format(x)).append('"');
         element.append(" y=\"").append(SvgPathEncoder.format(y)).append('"');
         element.append(" width=\"").append(SvgPathEncoder.format(w)).append('"');
         element.append(" height=\"").append(SvgPathEncoder.format(h)).append('"');
         element.append(" fill=\"url(#").append(RASTER_PLACEHOLDER_PATTERN_ID).append(")\"");
         element.append(" fill-opacity=\"0.35\"");
         element.append(" stroke=\"#666\" stroke-width=\"0.75\" stroke-dasharray=\"4 3\"");
-        element.append(">\n    <title>Raster region (placeholder)</title>\n  </rect>\n</g>\n");
+        element.append(">\n");
+        element.append(transform.isEmpty() ? "  " : "    ");
+        element.append("<title id=\"").append(escapeAttr(elementIds.next())).append("\">");
+        element.append("Raster region (placeholder)</title>\n");
+        element.append(transform.isEmpty() ? "" : "  ");
+        element.append("</rect>");
+        if (!transform.isEmpty()) {
+            element.append("\n</g>");
+        }
+        element.append('\n');
         return element.toString();
     }
+
+    private static final double VIEWPORT_PAD = 1.0;
 
     private static BoundingBox visibleViewport(EpsDocument document) {
         Bounds preferred = new Bounds();
         Bounds fallbackPaint = new Bounds();
         Bounds page = Bounds.from(document.getBoundingBox());
-        Bounds activeClip = page.copy();
         for (GraphicsCommand command : document.getCommands()) {
             if (command instanceof GraphicsCommand.Clip) {
-                GraphicsCommand.Clip clip = (GraphicsCommand.Clip) command;
-                activeClip.intersect(Bounds.from(
-                        PathBounds.transformedBounds(clip.getPath(), command.getCtm())));
-            } else if (command instanceof GraphicsCommand.Fill) {
+                continue;
+            }
+            if (command instanceof GraphicsCommand.Fill) {
                 GraphicsCommand.Fill fill = (GraphicsCommand.Fill) command;
                 double[] bounds = PathBounds.transformedBounds(fill.getPath(), command.getCtm());
-                bounds = page.clamp(activeClip.clamp(bounds));
+                bounds = page.clamp(bounds);
                 fallbackPaint.include(bounds);
                 if (!isWhiteOrNone(fill.getFill())) {
                     preferred.include(bounds);
@@ -186,8 +514,8 @@ public final class SvgRenderer {
             } else if (command instanceof GraphicsCommand.Stroke) {
                 GraphicsCommand.Stroke stroke = (GraphicsCommand.Stroke) command;
                 double[] bounds = PathBounds.transformedBounds(stroke.getPath(), command.getCtm());
-                double pad = Math.max(0.5, stroke.getStrokeStyle().getLineWidth() / 2.0);
-                bounds = page.clamp(activeClip.clamp(bounds, pad));
+                double pad = Math.max(VIEWPORT_PAD, stroke.getStrokeStyle().getLineWidth() / 2.0);
+                bounds = page.clamp(bounds, pad);
                 fallbackPaint.include(bounds);
                 preferred.include(bounds);
             } else if (command instanceof GraphicsCommand.RasterPlaceholder) {
@@ -196,18 +524,72 @@ public final class SvgRenderer {
                 double[] bounds = new double[] {
                         region.getLlx(), region.getLly(), region.getUrx(), region.getUry()
                 };
-                bounds = page.clamp(activeClip.clamp(bounds));
+                bounds = page.clamp(bounds);
                 fallbackPaint.include(bounds);
                 preferred.include(bounds);
+            } else if (command instanceof GraphicsCommand.EmbeddedImage) {
+                GraphicsCommand.EmbeddedImage image = (GraphicsCommand.EmbeddedImage) command;
+                double[] bounds = transformedImageBounds(image);
+                bounds = page.clamp(bounds);
+                fallbackPaint.include(bounds);
+                preferred.include(bounds);
+            } else if (command instanceof GraphicsCommand.Text) {
+                GraphicsCommand.Text text = (GraphicsCommand.Text) command;
+                double[] bounds = transformedTextBounds(text);
+                bounds = page.clamp(bounds);
+                fallbackPaint.include(bounds);
+                if (!isWhiteOrNone(text.getFill())) {
+                    preferred.include(bounds);
+                }
             }
         }
         if (!preferred.isEmpty()) {
-            return preferred.toBoundingBox();
+            return padViewport(page, preferred.toBoundingBox());
         }
         if (!fallbackPaint.isEmpty()) {
-            return fallbackPaint.toBoundingBox();
+            return padViewport(page, fallbackPaint.toBoundingBox());
         }
         return document.getBoundingBox();
+    }
+
+    private static double[] transformedImageBounds(GraphicsCommand.EmbeddedImage image) {
+        Matrix ctm = image.getCtm();
+        int width = image.getWidth();
+        int height = image.getHeight();
+        double[][] pixelCorners = {{0, 0}, {width, 0}, {0, height}, {width, height}};
+        double minX = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double minY = Double.POSITIVE_INFINITY;
+        double maxY = Double.NEGATIVE_INFINITY;
+        for (double[] corner : pixelCorners) {
+            double[] point = imagePixelToEps(ctm, width, height, corner[0], corner[1]);
+            minX = Math.min(minX, point[0]);
+            maxX = Math.max(maxX, point[0]);
+            minY = Math.min(minY, point[1]);
+            maxY = Math.max(maxY, point[1]);
+        }
+        return new double[] {minX, minY, maxX, maxY};
+    }
+
+    private static double[] transformedTextBounds(GraphicsCommand.Text text) {
+        Matrix ctm = text.getCtm();
+        double fontSize = effectiveFontSize(text.getFontSize(), ctm);
+        double x0 = ctm.transformX(text.getX(), text.getY());
+        double y0 = ctm.transformY(text.getX(), text.getY());
+        double width = Math.max(fontSize * 0.55 * text.getText().length(), fontSize * 0.5);
+        return new double[] {x0, y0 - fontSize, x0 + width, y0 + fontSize * 0.25};
+    }
+
+    private static BoundingBox padViewport(Bounds page, BoundingBox viewport) {
+        BoundingBox padded = new BoundingBox(
+                viewport.getLlx() - VIEWPORT_PAD,
+                viewport.getLly() - VIEWPORT_PAD,
+                viewport.getUrx() + VIEWPORT_PAD,
+                viewport.getUry() + VIEWPORT_PAD);
+        double[] clamped = page.clamp(new double[] {
+                padded.getLlx(), padded.getLly(), padded.getUrx(), padded.getUry()
+        });
+        return new BoundingBox(clamped[0], clamped[1], clamped[2], clamped[3]);
     }
 
     private static boolean isWhiteOrNone(PaintStyle paint) {
@@ -262,41 +644,6 @@ public final class SvgRenderer {
             return bounds;
         }
 
-        static Bounds from(double[] values) {
-            Bounds bounds = new Bounds();
-            bounds.include(values);
-            return bounds;
-        }
-
-        Bounds copy() {
-            Bounds copy = new Bounds();
-            copy.minX = minX;
-            copy.minY = minY;
-            copy.maxX = maxX;
-            copy.maxY = maxY;
-            return copy;
-        }
-
-        void intersect(Bounds other) {
-            if (isEmpty() || other.isEmpty()) {
-                minX = Double.POSITIVE_INFINITY;
-                minY = Double.POSITIVE_INFINITY;
-                maxX = Double.NEGATIVE_INFINITY;
-                maxY = Double.NEGATIVE_INFINITY;
-                return;
-            }
-            minX = Math.max(minX, other.minX);
-            minY = Math.max(minY, other.minY);
-            maxX = Math.min(maxX, other.maxX);
-            maxY = Math.min(maxY, other.maxY);
-            if (maxX <= minX || maxY <= minY) {
-                minX = Double.POSITIVE_INFINITY;
-                minY = Double.POSITIVE_INFINITY;
-                maxX = Double.NEGATIVE_INFINITY;
-                maxY = Double.NEGATIVE_INFINITY;
-            }
-        }
-
         double[] clamp(double[] values) {
             return clamp(values, 0);
         }
@@ -316,19 +663,28 @@ public final class SvgRenderer {
         }
     }
 
-    private static String pathElement(Path path, String transform, String paintAttributes) {
+    private static String pathElement(
+            Path path, String transform, ElementIds elementIds, String paintAttributes) {
         String d = SvgPathEncoder.toPathData(path);
         if (d.isEmpty()) {
             return "";
         }
         StringBuilder element = new StringBuilder();
-        element.append("<g");
         if (!transform.isEmpty()) {
+            element.append("<g");
+            element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
             element.append(" transform=\"").append(escapeAttr(transform)).append('"');
+            element.append(">\n  ");
         }
-        element.append(">\n  <path d=\"").append(escapeAttr(d)).append('"');
+        element.append("<path");
+        element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
+        element.append(" d=\"").append(escapeAttr(d)).append('"');
         element.append(paintAttributes);
-        element.append("/>\n</g>\n");
+        element.append("/>");
+        if (!transform.isEmpty()) {
+            element.append("\n</g>");
+        }
+        element.append('\n');
         return element.toString();
     }
 
@@ -438,7 +794,18 @@ public final class SvgRenderer {
         };
     }
 
+    private static String sanitizeLayerId(String layerId) {
+        if (layerId == null || layerId.isBlank()) {
+            return "layer";
+        }
+        return layerId.replaceAll("[^A-Za-z0-9_\\-:.]", "_");
+    }
+
     private static String escapeAttr(String value) {
         return value.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;");
+    }
+
+    private static String escapeText(String value) {
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }

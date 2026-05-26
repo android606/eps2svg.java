@@ -34,7 +34,7 @@ final class AdobeIllustratorShorthand {
             "clip", "eoclip", "newpath", "concat", "gsave", "grestore",
             "setlinewidth", "setlinecap", "setlinejoin", "setmiterlimit", "setdash",
             "setgray", "setrgbcolor", "setcmykcolor", "setoverprint", "translate",
-            "scale", "rotate", "show");
+            "scale", "rotate", "show", "setfont", "findfont", "scalefont", "selectfont");
 
     /** Static fallbacks when prolog is not executed (order preserved for readability). */
     private static final Map<String, String> STATIC_BODY = Map.ofEntries(
@@ -72,7 +72,10 @@ final class AdobeIllustratorShorthand {
             Map.entry("ml", "{ setmiterlimit }"),
             Map.entry("d", "{ setdash }"),
             Map.entry("dsh", "{ setdash }"),
-            Map.entry("sh", "{ pop }"),
+            Map.entry("sh", "{ show }"),
+            Map.entry("sf", "{ setfont }"),
+            Map.entry("se", "{ selectfont }"),
+            Map.entry("Fo", "{ findfont }"),
             Map.entry("sadj", "{ pop }"),
             Map.entry("sop", "{ pop }"),
             Map.entry("XR", "{ pop }"),

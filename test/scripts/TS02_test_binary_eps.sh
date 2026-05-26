@@ -69,8 +69,8 @@ done
 
 # Special test: Compare binary and text versions of the same file
 print_test_line "Binary vs text version comparison" | tee -a "$LOG_FILE"
-binary_output="$OUTPUT_DIR/manufactured_by-binary_normal.svg"
-text_output="$OUTPUT_DIR/manufactured_by_normal.svg"
+binary_output="$OUTPUT_DIR/ec_rep-binary_normal.svg"
+text_output="$OUTPUT_DIR/ec_rep_normal.svg"
 
 TOTAL_TESTS=$((TOTAL_TESTS+1))
 

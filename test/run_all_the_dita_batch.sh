@@ -9,6 +9,7 @@ OUT="test/output/all-the-dita"
 LOG_DIR="test/output/logs"
 PROG="$LOG_DIR/all-the-dita_batch_progress.txt"
 LOG_CFG="test/batch-convert-logging.properties"
+DISPLAY_OPTS="--min-width 100 --min-height 100 --max-width 8.5in --max-height 11in"
 
 mkdir -p "$OUT" "$LOG_DIR"
 : > "$PROG"
@@ -23,7 +24,7 @@ while IFS= read -r eps; do
   svg="$OUT/${rel%.eps}.svg"
   mkdir -p "$(dirname "$svg")"
   if java -Djava.util.logging.config.file="$LOG_CFG" \
-      -jar "$JAR" "$eps" "$svg" >> "$LOG_DIR/all-the-dita_batch_stdout.log" 2>&1; then
+      -jar "$JAR" $DISPLAY_OPTS "$eps" "$svg" >> "$LOG_DIR/all-the-dita_batch_stdout.log" 2>&1; then
     echo "OK $rel" >> "$PROG"
     ok=$((ok + 1))
   else

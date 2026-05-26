@@ -25,6 +25,9 @@ public final class PostScriptParser {
 
     public PsValue parseObject(PostScriptLexer lexer) throws IOException {
         PostScriptToken token = lexer.nextToken();
+        if (token.getType() == PostScriptTokenType.BEGIN_BINARY_INVOKE) {
+            return new PsValue.AgmBinaryInvokeValue(token.getText(), token.getBinaryPayload());
+        }
         switch (token.getType()) {
             case INTEGER:
                 return new PsValue.IntegerValue(parseIntegerText(token.getText()));

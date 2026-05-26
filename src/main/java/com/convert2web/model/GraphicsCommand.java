@@ -1,5 +1,7 @@
 package com.convert2web.model;
 
+import java.util.List;
+
 /**
  * One drawing operation recorded in an {@link EpsDocument}.
  */
@@ -8,7 +10,12 @@ public abstract class GraphicsCommand {
         FILL,
         STROKE,
         CLIP,
-        RASTER_PLACEHOLDER
+        POP_CLIP,
+        EMBEDDED_IMAGE,
+        TEXT,
+        RASTER_PLACEHOLDER,
+        BEGIN_LAYER_GROUP,
+        END_LAYER_GROUP
     }
 
     private final Matrix ctm;
@@ -125,6 +132,154 @@ public abstract class GraphicsCommand {
         @Override
         public Kind getKind() {
             return Kind.CLIP;
+        }
+    }
+
+    /** Closes one SVG clip group opened by a prior {@link Clip} command. */
+    public static final class PopClip extends GraphicsCommand {
+        public PopClip() {
+            super(Matrix.identity());
+        }
+
+        @Override
+        public Kind getKind() {
+            return Kind.POP_CLIP;
+        }
+    }
+
+    /** Opens an SVG {@code <g id="...">} for Illustrator layer debugging. */
+    public static final class BeginLayerGroup extends GraphicsCommand {
+        private final String layerId;
+
+        public BeginLayerGroup(String layerId) {
+            super(Matrix.identity());
+            this.layerId = layerId == null ? "" : layerId;
+        }
+
+        public String getLayerId() {
+            return layerId;
+        }
+
+        @Override
+        public Kind getKind() {
+            return Kind.BEGIN_LAYER_GROUP;
+        }
+    }
+
+    /** Closes the innermost layer group opened by {@link BeginLayerGroup}. */
+    public static final class EndLayerGroup extends GraphicsCommand {
+        public EndLayerGroup() {
+            super(Matrix.identity());
+        }
+
+        @Override
+        public Kind getKind() {
+            return Kind.END_LAYER_GROUP;
+        }
+    }
+
+    /** Live text recorded from {@code show} / Illustrator {@code sh}. */
+    public static final class Text extends GraphicsCommand {
+        private final String text;
+        private final double x;
+        private final double y;
+        private final String fontName;
+        private final double fontSize;
+        private final PaintStyle fill;
+
+        public Text(
+                String text,
+                double x,
+                double y,
+                String fontName,
+                double fontSize,
+                PaintStyle fill,
+                Matrix ctm) {
+            super(ctm);
+            this.text = text == null ? "" : text;
+            this.x = x;
+            this.y = y;
+            this.fontName = fontName == null || fontName.isEmpty() ? "Helvetica" : fontName;
+            this.fontSize = fontSize;
+            this.fill = fill == null ? PaintStyle.gray(0) : fill;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        public double getX() {
+            return x;
+        }
+
+        public double getY() {
+            return y;
+        }
+
+        public String getFontName() {
+            return fontName;
+        }
+
+        public double getFontSize() {
+            return fontSize;
+        }
+
+        public PaintStyle getFill() {
+            return fill;
+        }
+
+        @Override
+        public Kind getKind() {
+            return Kind.TEXT;
+        }
+    }
+
+    /** Decoded raster image embedded in Illustrator EPS (AGM binary tile). */
+    public static final class EmbeddedImage extends GraphicsCommand {
+        private final int width;
+        private final int height;
+        private final byte[] pngBytes;
+        private final List<Clip> clipStack;
+
+        public EmbeddedImage(int width, int height, Matrix ctm, byte[] pngBytes) {
+            this(width, height, ctm, pngBytes, List.of());
+        }
+
+        public EmbeddedImage(
+                int width,
+                int height,
+                Matrix ctm,
+                byte[] pngBytes,
+                List<Clip> clipStack) {
+            super(ctm);
+            this.width = width;
+            this.height = height;
+            this.pngBytes = pngBytes == null ? new byte[0] : pngBytes.clone();
+            this.clipStack = clipStack == null || clipStack.isEmpty()
+                    ? List.of()
+                    : List.copyOf(clipStack);
+        }
+
+        public int getWidth() {
+            return width;
+        }
+
+        public int getHeight() {
+            return height;
+        }
+
+        public byte[] getPngBytes() {
+            return pngBytes.clone();
+        }
+
+        /** Clips active when the tile was painted ({@code gsave}/{@code clp} before {@code sepimg}). */
+        public List<Clip> getClipStack() {
+            return clipStack;
+        }
+
+        @Override
+        public Kind getKind() {
+            return Kind.EMBEDDED_IMAGE;
         }
     }
 }

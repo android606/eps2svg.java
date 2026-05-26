@@ -6,13 +6,18 @@ import com.convert2web.model.Matrix;
 import com.convert2web.model.PaintStyle;
 import com.convert2web.model.Path;
 import com.convert2web.model.PathBounds;
+import com.convert2web.model.GraphicsCommand;
 import com.convert2web.model.WindingRule;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Appends {@link com.convert2web.model.GraphicsCommand}s from VM graphics state.
  */
 public final class EpsDocumentRecorder {
     private final EpsDocumentBuilder builder;
+    private final List<GraphicsCommand.Clip> clipStack = new ArrayList<>();
 
     public EpsDocumentRecorder(EpsDocumentBuilder builder) {
         this.builder = builder;
@@ -57,6 +62,20 @@ public final class EpsDocumentRecorder {
         }
     }
 
+    public void recordText(
+            String text,
+            double x,
+            double y,
+            String fontName,
+            double fontSize,
+            PaintStyle fill,
+            Matrix ctm) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        builder.addText(text, x, y, fontName, fontSize, fill, ctm);
+    }
+
     /**
      * Illustrator EPS often paints border/background fills after glyphs; queue them at the
      * back so letterforms and dividers stay visible in SVG.
@@ -98,7 +117,29 @@ public final class EpsDocumentRecorder {
             state.clearPath();
             return;
         }
-        builder.addClip(path, windingRule, state.getCtm());
+        Matrix ctm = state.getCtm();
+        clipStack.add(new GraphicsCommand.Clip(path, windingRule, ctm));
+        builder.addClip(path, windingRule, ctm);
+        state.incrementClipDepth();
         state.clearPath();
+    }
+
+    /** Clips active at the current paint point (for AGM tiles). */
+    public List<GraphicsCommand.Clip> getActiveClips() {
+        return List.copyOf(clipStack);
+    }
+
+    public void recordEmbeddedImage(int width, int height, Matrix ctm, byte[] pngBytes) {
+        builder.addEmbeddedImage(width, height, ctm, pngBytes, getActiveClips());
+    }
+
+  /** Emits {@link com.convert2web.model.GraphicsCommand.PopClip} for each restored clip level. */
+    public void popClipsToDepth(int targetDepth, int previousDepth) {
+        for (int i = targetDepth; i < previousDepth; i++) {
+            builder.addPopClip();
+            if (!clipStack.isEmpty()) {
+                clipStack.remove(clipStack.size() - 1);
+            }
+        }
     }
 }

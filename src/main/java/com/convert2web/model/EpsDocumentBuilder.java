@@ -1,5 +1,7 @@
 package com.convert2web.model;
 
+import com.convert2web.model.GraphicsCommand.Clip;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -54,8 +56,39 @@ public final class EpsDocumentBuilder {
         return this;
     }
 
+    public EpsDocumentBuilder addPopClip() {
+        commands.add(new GraphicsCommand.PopClip());
+        return this;
+    }
+
     public EpsDocumentBuilder addRasterPlaceholder(BoundingBox region, Matrix ctm) {
         commands.add(new GraphicsCommand.RasterPlaceholder(region, ctm));
+        return this;
+    }
+
+    public EpsDocumentBuilder addEmbeddedImage(int width, int height, Matrix ctm, byte[] pngBytes) {
+        return addEmbeddedImage(width, height, ctm, pngBytes, List.of());
+    }
+
+    public EpsDocumentBuilder addEmbeddedImage(
+            int width,
+            int height,
+            Matrix ctm,
+            byte[] pngBytes,
+            List<Clip> clipStack) {
+        commands.add(new GraphicsCommand.EmbeddedImage(width, height, ctm, pngBytes, clipStack));
+        return this;
+    }
+
+    public EpsDocumentBuilder addText(
+            String text,
+            double x,
+            double y,
+            String fontName,
+            double fontSize,
+            PaintStyle fill,
+            Matrix ctm) {
+        commands.add(new GraphicsCommand.Text(text, x, y, fontName, fontSize, fill, ctm));
         return this;
     }
 

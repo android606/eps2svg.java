@@ -14,13 +14,29 @@ public class App {
     }
 
     public static void main(String[] args) {
-        if (args.length != 2) {
-            System.out.println("Usage: java -jar eps2svg.jar <input_eps_file> <output_svg_file>");
+        Eps2SvgCli.ParsedCommand command;
+        try {
+            command = Eps2SvgCli.parse(args);
+        } catch (IllegalArgumentException e) {
+            System.err.println(e.getMessage());
+            Eps2SvgCli.printHelp(System.err);
+            System.exit(1);
+            return;
+        }
+
+
+        if (command.help()) {
+            Eps2SvgCli.printHelp(System.out);
+            System.exit(0);
+        }
+
+        if (command.inputPath() == null || command.outputPath() == null) {
+            Eps2SvgCli.printHelp(System.err);
             System.exit(1);
         }
 
-        String inputPath = args[0];
-        String outputPath = args[1];
+        String inputPath = command.inputPath();
+        String outputPath = command.outputPath();
 
         File inputFile = new File(inputPath);
         if (!inputFile.exists() || !inputFile.isFile()) {
@@ -38,7 +54,7 @@ public class App {
         }
 
         try {
-            new EpsToSvgConverter().convert(inputPath, outputPath);
+            new EpsToSvgConverter(command.renderOptions()).convert(inputPath, outputPath);
             System.out.println("Conversion completed successfully.");
         } catch (IOException e) {
             System.err.println("Conversion failed: " + e.getMessage());

@@ -1,5 +1,6 @@
 package com.convert2web;
 
+import com.convert2web.image.IllustratorAgmImageExtractor;
 import com.convert2web.model.BoundingBox;
 import com.convert2web.model.EpsDocument;
 import com.convert2web.model.GraphicsCommand;
@@ -79,6 +80,10 @@ final class AdobeIllustratorPageRunner {
             logger.log(Level.FINE, "Prolog execution error (continuing): {0}", e.getMessage());
         }
         vm.resetForPageBody();
+        String rawPage = extractRawPageBody(postScript);
+        if (rawPage != null) {
+            vm.setIndexedPaletteContext(rawPage);
+        }
         try {
             executeProgram(vm, buildShorthandPreamble(postScript) + "end\n", true);
             executeProgram(vm, pageBody + "\nend\n", false);
@@ -123,6 +128,12 @@ final class AdobeIllustratorPageRunner {
                 : SHORTHAND_PREAMBLE;
         String program = preamble + pageBody + "\nend\n";
         PostScriptVm vm = newPostScriptVm(boundingBox, illustratorYDown);
+        if (postScriptForAliases != null) {
+            String rawPage = extractRawPageBody(postScriptForAliases);
+            if (rawPage != null) {
+                vm.setIndexedPaletteContext(rawPage);
+            }
+        }
         try (PostScriptLexer lexer = new PostScriptLexer(new StringReader(program))) {
             List<PsValue> tokens = new PostScriptParser().parseAll(lexer);
             try {
@@ -142,6 +153,31 @@ final class AdobeIllustratorPageRunner {
      * Tries tier 1, then 2, then 3 in order.
      */
     static EpsDocument convertIllustratorPostScript(String postScript, BoundingBox boundingBox) {
+        return convertIllustratorPostScript(postScript, boundingBox, null);
+    }
+
+    static EpsDocument convertIllustratorPostScript(
+            String postScript, BoundingBox boundingBox, java.nio.file.Path illustratorReferenceSvg) {
+        EpsDocument document = convertIllustratorPostScriptInternal(postScript, boundingBox);
+        if (document == null || illustratorReferenceSvg == null) {
+            return document;
+        }
+        List<GraphicsCommand> vectorsOnly = new ArrayList<>();
+        for (GraphicsCommand command : document.getCommands()) {
+            if (!(command instanceof GraphicsCommand.EmbeddedImage)) {
+                vectorsOnly.add(command);
+            }
+        }
+        EpsDocument vectors = new EpsDocument(
+                document.getBoundingBox(),
+                document.getHiResBoundingBox(),
+                vectorsOnly,
+                document.metadata());
+        String rawPage = extractRawPageBody(postScript);
+        return IllustratorAgmImageExtractor.mergeIntoDocument(vectors, rawPage, illustratorReferenceSvg);
+    }
+
+    private static EpsDocument convertIllustratorPostScriptInternal(String postScript, BoundingBox boundingBox) {
         EpsDocument document = runFullPostScript(postScript, boundingBox);
         if (document != null) {
             logger.info("Illustrator path: full PostScript");
@@ -191,7 +227,7 @@ final class AdobeIllustratorPageRunner {
         if (body.isEmpty()) {
             return null;
         }
-        return sanitizeIllustratorPageText(body);
+        return sanitizeIllustratorPageBody(body);
     }
 
     /** Page body text before sanitization (for raster placeholder discovery). */
@@ -212,10 +248,38 @@ final class AdobeIllustratorPageRunner {
     }
 
     /**
+     * Sanitizes Illustrator page body for VM execution: keeps image dictionaries and
+     * {@code %%BeginBinary} blocks (parsed by {@link com.convert2web.ps.PostScriptLexer}).
+     */
+    static String sanitizeIllustratorPageBody(String text) {
+        if (text == null) {
+            return null;
+        }
+        String body = stripLevelWrapperBlocks(text);
+        body = stripIllustratorColorServerDicts(body);
+        body = body.replaceAll("(?m)^false sop\\s*\\r?\\n?", "");
+        body = body.replaceAll("(?m)^true sop\\s*\\r?\\n?", "");
+        body = body.replaceAll("(?m)^\\d+ /0 /CSD get_res sepcs\\s*\\r?\\n?", "");
+        body = stripMarkedBlocks(body, "/BCKTCI");
+        body = stripShadingBlocks(body);
+        body = stripAdobeFontBlocks(body, "%ADOBeginSubsetFont:");
+        body = stripAdobeFontBlocks(body, "%ADOt1write:");
+        body = body.replaceAll("(?m)^%ADO.*$\\r?\\n?", "");
+        body = body.replaceAll("(?m)^userdict /annotatepage.*ifelse\\s*\\r?\\n?", "");
+        body = body.replaceAll(
+                "(?m)^1\\s+-1\\s+scale\\s+0\\s+-?[\\d.]+(?:[eE][+-]?\\d+)?\\s+translate\\s*\\r?\\n?",
+                "");
+        return body;
+    }
+
+    /**
      * Removes Illustrator binary blobs and setup blocks that break the lexer or are not needed
-     * for vector path extraction.
+     * for vector path extraction in prolog/setup sections.
      */
     static String sanitizeIllustratorPageText(String text) {
+        if (text == null) {
+            return null;
+        }
         String body = stripLevelWrapperBlocks(text);
         body = stripMarkedBlocks(body, "%%BeginBinary:", "%%EndBinary");
         body = stripMarkedBlocks(body, "/BCKTCI");
@@ -228,7 +292,6 @@ final class AdobeIllustratorPageRunner {
         body = body.replaceAll("(?s)<~[^~]{0,50000}~>\\s*", "");
         body = body.replaceAll("(?s)<[^~]{0,50000}~>\\s*", "");
         body = body.replaceAll("(?m)^[^\\r\\n]{0,500}~>\\s*\\r?\\n?", "");
-        body = body.replaceAll("(?s)\\d+\\.\\d+ \\d+\\.\\d+ mo\\s*\\([^)]{0,200}\\)sh\\s*", "");
         body = body.replaceAll("(?m)^%ADO.*$\\r?\\n?", "");
         body = body.replaceAll("(?m)^userdict /annotatepage.*ifelse\\s*\\r?\\n?", "");
         body = body.replaceAll(
@@ -260,14 +323,21 @@ final class AdobeIllustratorPageRunner {
                 break;
             }
             out.append(text, i, start);
-            int depth = 1;
+            int dictDepth = 1;
+            int arrayDepth = 0;
             int j = start + 2;
-            while (j < text.length() - 1 && depth > 0) {
+            while (j < text.length() - 1 && dictDepth > 0) {
                 if (text.startsWith("<<", j)) {
-                    depth++;
+                    dictDepth++;
                     j += 2;
-                } else if (text.startsWith(">>", j)) {
-                    depth--;
+                } else if (text.charAt(j) == '[') {
+                    arrayDepth++;
+                    j++;
+                } else if (text.charAt(j) == ']' && arrayDepth > 0) {
+                    arrayDepth--;
+                    j++;
+                } else if (text.startsWith(">>", j) && arrayDepth == 0) {
+                    dictDepth--;
                     j += 2;
                 } else {
                     j++;
@@ -411,6 +481,71 @@ final class AdobeIllustratorPageRunner {
     }
 
     /**
+     * Removes Illustrator color-server {@code << /Name (…) … >>} blocks (executable entries, not
+     * static dict literals). Image paint dictionaries use {@code /W} and {@code /H}, not {@code /Name}.
+     */
+    static String stripIllustratorColorServerDicts(String text) {
+        String marker = "<<\n/Name";
+        StringBuilder out = new StringBuilder();
+        int i = 0;
+        while (true) {
+            int nameIdx = text.indexOf(marker, i);
+            if (nameIdx < 0) {
+                out.append(text.substring(i));
+                break;
+            }
+            int dictStart = text.lastIndexOf("<<", nameIdx);
+            if (dictStart < 0 || nameIdx - dictStart > 24) {
+                out.append(text, i, nameIdx + 1);
+                i = nameIdx + 1;
+                continue;
+            }
+            out.append(text, i, dictStart);
+            int dictEnd = findDoubleAngleDictionaryEnd(text, dictStart);
+            if (dictEnd < 0) {
+                out.append(text.substring(dictStart));
+                break;
+            }
+            i = dictEnd;
+            while (i < text.length() && Character.isWhitespace(text.charAt(i))) {
+                i++;
+            }
+            if (text.startsWith("/CSD add_res", i)) {
+                int lineEnd = text.indexOf('\n', i);
+                i = lineEnd < 0 ? text.length() : lineEnd + 1;
+            }
+        }
+        return out.toString();
+    }
+
+    private static int findDoubleAngleDictionaryEnd(String text, int start) {
+        if (!text.startsWith("<<", start)) {
+            return -1;
+        }
+        int dictDepth = 1;
+        int arrayDepth = 0;
+        int j = start + 2;
+        while (j < text.length() - 1 && dictDepth > 0) {
+            if (text.startsWith("<<", j)) {
+                dictDepth++;
+                j += 2;
+            } else if (text.charAt(j) == '[') {
+                arrayDepth++;
+                j++;
+            } else if (text.charAt(j) == ']' && arrayDepth > 0) {
+                arrayDepth--;
+                j++;
+            } else if (text.startsWith(">>", j) && arrayDepth == 0) {
+                dictDepth--;
+                j += 2;
+            } else {
+                j++;
+            }
+        }
+        return dictDepth == 0 ? j : -1;
+    }
+
+    /**
      * Removes Illustrator {@code levelN{ ... }if} wrapper procedures that confuse the parser.
      */
     static String stripLevelWrapperBlocks(String text) {
@@ -494,14 +629,26 @@ final class AdobeIllustratorPageRunner {
         return vm;
     }
 
+    private static boolean hasEmbeddedImages(EpsDocument document) {
+        for (GraphicsCommand command : document.getCommands()) {
+            if (command instanceof GraphicsCommand.EmbeddedImage) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static EpsDocument documentOrNull(PostScriptVm vm, String tier, String postScript) {
         EpsDocument document = vm.getDocument();
         if (document.getCommands().isEmpty()) {
             logger.log(Level.FINE, "Illustrator {0}: no graphics commands recorded", tier);
             return null;
         }
+        String rawPage = postScript == null ? null : extractRawPageBody(postScript);
+        if (!hasEmbeddedImages(document) && rawPage != null) {
+            document = IllustratorAgmImageExtractor.mergeIntoDocument(document, rawPage);
+        }
         if (!hasVisibleArt(document)) {
-            String rawPage = extractRawPageBody(postScript);
             List<BoundingBox> rasterRegions = rawPage == null
                     ? List.of()
                     : IllustratorPatternRasterPlaceholder.scan(rawPage);
@@ -542,6 +689,15 @@ final class AdobeIllustratorPageRunner {
         for (GraphicsCommand command : document.getCommands()) {
             if (command instanceof GraphicsCommand.RasterPlaceholder) {
                 return true;
+            }
+            if (command instanceof GraphicsCommand.EmbeddedImage) {
+                return true;
+            }
+            if (command instanceof GraphicsCommand.Text) {
+                GraphicsCommand.Text text = (GraphicsCommand.Text) command;
+                if (!isWhiteOrNone(text.getFill())) {
+                    return true;
+                }
             }
             if (command instanceof GraphicsCommand.Stroke) {
                 hasStroke = true;

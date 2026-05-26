@@ -72,6 +72,23 @@ class PostScriptLexerTest {
     }
 
     @Test
+    void tokenizesBeginBinaryBlockAsSingleInvoke() throws Exception {
+        String input = "10\n"
+                + "%%BeginBinary: 1\n"
+                + "sepimg\n"
+                + "JcLB&\n"
+                + "%%EndBinary\n"
+                + "20\n";
+        List<PostScriptToken> tokens = lex(input);
+        assertEquals(3, tokens.size());
+        assertEquals(PostScriptTokenType.INTEGER, tokens.get(0).getType());
+        assertEquals(PostScriptTokenType.BEGIN_BINARY_INVOKE, tokens.get(1).getType());
+        assertEquals("sepimg", tokens.get(1).getText());
+        assertEquals("JcLB&", tokens.get(1).getBinaryPayload());
+        assertEquals(PostScriptTokenType.INTEGER, tokens.get(2).getType());
+    }
+
+    @Test
     void skipsComments() throws Exception {
         List<PostScriptToken> tokens = lex("10 % comment\n20");
 

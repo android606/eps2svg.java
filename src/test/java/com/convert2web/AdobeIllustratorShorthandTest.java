@@ -24,6 +24,7 @@ class AdobeIllustratorShorthandTest {
     void staticFallbackWhenNoProlog() {
         String preamble = AdobeIllustratorShorthand.buildPreamble("");
         assertTrue(preamble.contains("/mo { moveto }"));
+        assertTrue(preamble.contains("/sh { show }"));
         assertTrue(preamble.contains("userdict begin"));
     }
 }

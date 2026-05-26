@@ -206,6 +206,20 @@ class PostScriptVmGraphicsTest {
     }
 
     @Test
+    void grestoreEmitsPopClipAfterScopedClip() {
+        EpsDocument doc = runDocument(
+                "gsave newpath 0 0 moveto 10 0 lineto 10 10 lineto 0 10 lineto closepath clip "
+                        + "newpath 1 1 moveto 2 2 lineto fill grestore "
+                        + "newpath 3 3 moveto 4 4 lineto fill");
+
+        assertEquals(4, doc.getCommands().size());
+        assertInstanceOf(GraphicsCommand.Clip.class, doc.getCommands().get(0));
+        assertInstanceOf(GraphicsCommand.Fill.class, doc.getCommands().get(1));
+        assertInstanceOf(GraphicsCommand.PopClip.class, doc.getCommands().get(2));
+        assertInstanceOf(GraphicsCommand.Fill.class, doc.getCommands().get(3));
+    }
+
+    @Test
     void multiplePaintOperatorsAppendMultipleCommands() {
         EpsDocument doc = runDocument(
                 "newpath 0 0 moveto 1 0 lineto stroke "
@@ -221,6 +235,35 @@ class PostScriptVmGraphicsTest {
         EpsDocument doc = runDocument("stroke");
 
         assertEquals(0, doc.getCommands().size());
+    }
+
+    @Test
+    void showRecordsTextCommand() {
+        EpsDocument doc = runDocument(
+                "/Helvetica findfont 12 scalefont setfont "
+                        + "0 0 0 setrgbcolor "
+                        + "10 20 moveto (Hello) show");
+
+        assertEquals(1, doc.getCommands().size());
+        GraphicsCommand.Text text = assertInstanceOf(GraphicsCommand.Text.class, doc.getCommands().get(0));
+        assertEquals("Hello", text.getText());
+        assertEquals(10.0, text.getX(), 1e-9);
+        assertEquals(20.0, text.getY(), 1e-9);
+        assertEquals(12.0, text.getFontSize(), 1e-9);
+    }
+
+    @Test
+    void illustratorShorthandShowRecordsText() {
+        EpsDocument doc = runDocument(
+                "userdict begin /sh { show } bind def "
+                        + "/Helvetica findfont 10 scalefont setfont "
+                        + "9.0045 162.1917 moveto ((Blue)) sh");
+
+        assertEquals(1, doc.getCommands().size());
+        GraphicsCommand.Text text = assertInstanceOf(GraphicsCommand.Text.class, doc.getCommands().get(0));
+        assertEquals("(Blue)", text.getText());
+        assertEquals(9.0045, text.getX(), 1e-9);
+        assertEquals(162.1917, text.getY(), 1e-9);
     }
 
     private static void assertMoveTo(Path path, int index, double x, double y) {

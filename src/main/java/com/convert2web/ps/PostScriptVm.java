@@ -27,6 +27,7 @@ public final class PostScriptVm {
     private VmGraphicsState graphicsState = new VmGraphicsState();
     private final EpsDocumentBuilder documentBuilder = new EpsDocumentBuilder();
     private final EpsDocumentRecorder documentRecorder = new EpsDocumentRecorder(documentBuilder);
+    private String indexedPaletteContext;
     private int loopDepth;
     private boolean exitRequested;
 
@@ -59,7 +60,19 @@ public final class PostScriptVm {
         }
     }
 
+    public void setIndexedPaletteContext(String pageBody) {
+        this.indexedPaletteContext = pageBody;
+    }
+
+    public String getIndexedPaletteContext() {
+        return indexedPaletteContext;
+    }
+
     public void execute(PsValue value) {
+        if (value instanceof PsValue.AgmBinaryInvokeValue) {
+            AgmImagePaint.apply(this, (PsValue.AgmBinaryInvokeValue) value);
+            return;
+        }
         if (value instanceof PsValue.NameValue) {
             PsValue.NameValue name = (PsValue.NameValue) value;
             if (name.isLiteral()) {
@@ -119,6 +132,12 @@ public final class PostScriptVm {
         return graphicsState;
     }
 
+    private void applyGraphicsState(VmGraphicsState next) {
+        int depthBefore = graphicsState.getClipDepth();
+        graphicsState = next;
+        documentRecorder.popClipsToDepth(next.getClipDepth(), depthBefore);
+    }
+
     public Deque<PsValue> getOperandStack() {
         return operandStack;
     }
@@ -138,6 +157,10 @@ public final class PostScriptVm {
 
     public EpsDocumentBuilder getDocumentBuilder() {
         return documentBuilder;
+    }
+
+    public EpsDocumentRecorder getDocumentRecorder() {
+        return documentRecorder;
     }
 
     public EpsDocument getDocument() {
@@ -427,15 +450,16 @@ public final class PostScriptVm {
 
         registerGraphicsOperators();
 
+        registerAgmImageOperators();
         register("showpage", vm -> { });
         register("save", vm -> vm.push(new PsValue.SaveStateValue(vm.graphicsState.copy())));
         register("restore", vm -> {
             PsValue token = vm.pop();
             if (token instanceof PsValue.SaveStateValue) {
-                vm.graphicsState = ((PsValue.SaveStateValue) token).getGraphicsState();
+                vm.applyGraphicsState(((PsValue.SaveStateValue) token).getGraphicsState());
             } else if (!graphicsStack.isEmpty()) {
                 vm.pop();
-                vm.graphicsState = graphicsStack.pop();
+                vm.applyGraphicsState(graphicsStack.pop());
             }
         });
         register("gsave", vm -> graphicsStack.push(vm.graphicsState.copy()));
@@ -443,7 +467,7 @@ public final class PostScriptVm {
             if (graphicsStack.isEmpty()) {
                 throw new PostScriptVmException("graphicsstackunderflow");
             }
-            vm.graphicsState = graphicsStack.pop();
+            vm.applyGraphicsState(graphicsStack.pop());
         });
 
         for (Map.Entry<String, PostScriptOperator> entry : systemOperators.entrySet()) {
@@ -566,7 +590,13 @@ public final class PostScriptVm {
             setCurrentFont(vm, vm.pop());
             vm.getGraphicsState().setFontSize(size);
         });
-        register("show", vm -> vm.pop());
+        register("show", vm -> showText(vm));
+        register("sh", vm -> showText(vm));
+        register("xsh", vm -> vm.pop());
+        register("xshow", vm -> {
+            vm.pop();
+            showText(vm);
+        });
         register("setcachedevice", vm -> {
             popNumber(vm);
             popNumber(vm);
@@ -583,6 +613,13 @@ public final class PostScriptVm {
             double x = popNumber(vm);
             vm.graphicsState.appendRectangle(x, y, width, height);
         });
+    }
+
+    private void registerAgmImageOperators() {
+        register("snap_to_device", vm -> { });
+        register("sepimg", vm -> { });
+        register("img", vm -> { });
+        register("idximg", vm -> { });
     }
 
     private void registerGraphicsOperators() {
@@ -1141,6 +1178,27 @@ public final class PostScriptVm {
         if (sizeValue != null) {
             vm.graphicsState.setFontSize(numberFromValue(sizeValue));
         }
+    }
+
+    private static void showText(PostScriptVm vm) {
+        PsValue value = vm.pop();
+        if (!(value instanceof PsValue.StringValue)) {
+            throw new PostScriptVmException("typecheck");
+        }
+        String text = ((PsValue.StringValue) value).getValue();
+        if (text.isEmpty()) {
+            return;
+        }
+        VmGraphicsState state = vm.graphicsState;
+        vm.documentRecorder.recordText(
+                text,
+                state.getCurrentX(),
+                state.getCurrentY(),
+                state.getFontName(),
+                state.getFontSize(),
+                state.getFillColor(),
+                state.getCtm());
+        state.clearIfOnlyMoveToPath();
     }
 
     private static PsValue numberValue(double value) {

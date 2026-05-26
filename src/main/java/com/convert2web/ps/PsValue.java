@@ -254,6 +254,33 @@ public abstract class PsValue {
         }
     }
 
+    /**
+     * Executable AGM paint step: image dictionary is already on the operand stack;
+     * this value carries the {@code %%BeginBinary} operator and payload.
+     */
+    public static final class AgmBinaryInvokeValue extends PsValue {
+        private final String operator;
+        private final String payload;
+
+        public AgmBinaryInvokeValue(String operator, String payload) {
+            this.operator = Objects.requireNonNull(operator, "operator");
+            this.payload = payload == null ? "" : payload;
+        }
+
+        public String getOperator() {
+            return operator;
+        }
+
+        public String getPayload() {
+            return payload;
+        }
+
+        @Override
+        public PsValueKind getKind() {
+            return PsValueKind.AGM_BINARY_INVOKE;
+        }
+    }
+
     public static final class DictionaryValue extends PsValue {
         private final Map<String, PsValue> entries;
 

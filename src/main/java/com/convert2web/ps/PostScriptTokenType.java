@@ -14,5 +14,7 @@ public enum PostScriptTokenType {
     PROCEDURE_END,
     DICTIONARY_START,
     DICTIONARY_END,
+    /** {@code %%BeginBinary} ... {@code %%EndBinary} AGM paint (operator in {@link PostScriptToken#getText()}). */
+    BEGIN_BINARY_INVOKE,
     EOF
 }

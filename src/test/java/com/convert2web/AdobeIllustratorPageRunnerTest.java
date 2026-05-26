@@ -3,6 +3,7 @@ package com.convert2web;
 import com.convert2web.model.BoundingBox;
 import com.convert2web.model.EpsDocument;
 import com.convert2web.model.EpsDocumentBuilder;
+import com.convert2web.model.GraphicsCommand;
 import com.convert2web.model.Matrix;
 import com.convert2web.model.PaintStyle;
 import com.convert2web.model.PathSegment;
@@ -45,6 +46,35 @@ class AdobeIllustratorPageRunnerTest {
     }
 
     @Test
+    void homeExampleLayeredCmykDoesNotTrapArtworkInLayerClipIntersection() throws Exception {
+        Path eps = Path.of(
+                "/Users/android/Downloads/All-the-DITA/Image_Libraries/GC059885-00-BASE IMAGES/rta_AB_ill_Home_Example_Layered_CMYK.eps");
+        if (!Files.exists(eps)) {
+            return;
+        }
+        BinaryEpsReader.BinaryEpsData data = BinaryEpsReader.read(eps.toString());
+        EpsDocument document = AdobeIllustratorPageRunner.convertIllustratorPostScript(
+                new String(data.postScriptData, StandardCharsets.ISO_8859_1), data.boundingBox);
+        assertNotNull(document);
+        String svg = new SvgRenderer().render(document);
+        long popClips = document.getCommands().stream()
+                .filter(GraphicsCommand.PopClip.class::isInstance)
+                .count();
+        assertTrue(popClips >= 2, "layer clips should be popped on grestore");
+        int clip5 = svg.indexOf("clip-path=\"url(#clip5)\"");
+        if (clip5 >= 0) {
+            int closeAfterClip5 = svg.indexOf("</g>", clip5);
+            int pathAfterClip5 = svg.indexOf("<path", clip5);
+            assertTrue(pathAfterClip5 < 0 || closeAfterClip5 < pathAfterClip5,
+                    "clip5 must not wrap visible paths");
+        }
+        assertTrue(svg.contains("rgb(210,255,191)"));
+        assertTrue(svg.contains("M6.744 22.5288"));
+        assertTrue(svg.contains("data:image/png;base64,"));
+        assertTrue(svg.contains("<image"));
+    }
+
+    @Test
     void asciiIllustratorV14666408ProducesVectorPaths() throws Exception {
         String path = "test/test_images/real_live_images/v14666408_en-ca.eps";
         EpsDocument document = new AsciiEpsConverter().convertToDocument(path);
@@ -73,15 +103,15 @@ class AdobeIllustratorPageRunnerTest {
     }
 
     @Test
-    void extractPageBodyStripsIllustratorAngleDictMetadata() {
+    void extractPageBodyKeepsImageDictionaryForVm() {
         String body = "np 0 0 mo\n"
-                + "< /T 1 /W 480 /H 640 /M[480 0 0 -640 0 640] /BC 8 >\n"
+                + "<< /T 1 /W 480 /H 640 /M[480 0 0 -640 0 640] /BC 8 >>\n"
                 + "10 10 li f\n";
-        String stripped = AdobeIllustratorPageRunner.extractPageBody(
+        String pageBody = AdobeIllustratorPageRunner.extractPageBody(
                 "%%EndSetup\n" + body + "\n%%PageTrailer\n");
-        assertNotNull(stripped);
-        assertFalse(stripped.contains("/T 1"));
-        assertTrue(stripped.contains("10 10 li"));
+        assertNotNull(pageBody);
+        assertTrue(pageBody.contains("/T 1"));
+        assertTrue(pageBody.contains("10 10 li"));
     }
 
     @Test
@@ -113,6 +143,23 @@ class AdobeIllustratorPageRunnerTest {
     }
 
     @Test
+    void stripDoubleAngleDictsIgnoresGtGtInsideDsArray() {
+        String input = "snap\n<<\n/DS [\n<~!!!>>q\"X%9!!!~>\n]\n/O 3\n>>\ngrestore\n";
+        String stripped = AdobeIllustratorPageRunner.sanitizeIllustratorPageText(input);
+        assertFalse(stripped.contains(">>"));
+        assertFalse(stripped.matches("(?s).*\\n\\]\\n.*"));
+        assertTrue(stripped.contains("grestore"));
+    }
+
+    @Test
+    void sanitizeKeepsMoShowTextLines() throws Exception {
+        String input = "9.0045 162.1917 mo\n(Blue Below)sh\n10 0 li\n";
+        String sanitized = AdobeIllustratorPageRunner.sanitizeIllustratorPageText(input);
+        assertTrue(sanitized.contains("(Blue Below)sh"));
+        assertTrue(sanitized.contains("9.0045 162.1917 mo"));
+    }
+
+    @Test
     void sanitizeKeepsXshSpacingArrayClosingBracket() throws Exception {
         String input = "34.1128 50 mo\n"
                 + "(Condition Fir)sh\n"
@@ -127,17 +174,17 @@ class AdobeIllustratorPageRunnerTest {
     }
 
     @Test
-    void extractPageBodyStripsBeginBinaryBlocks() {
+    void extractPageBodyKeepsBeginBinaryBlocks() {
         String body = "1 0 mo\n"
                 + "%%BeginBinary: 1\nimg\nJcP<@not-hex-data\n"
                 + "%%EndBinary\n"
                 + "10 0 li f\n";
-        String stripped = AdobeIllustratorPageRunner.extractPageBody(
+        String pageBody = AdobeIllustratorPageRunner.extractPageBody(
                 "%%EndSetup\n" + body + "\n%%PageTrailer\n");
-        assertNotNull(stripped);
-        assertFalse(stripped.contains("BeginBinary"));
-        assertFalse(stripped.contains("JcP<@"));
-        assertTrue(stripped.contains("10 0 li"));
+        assertNotNull(pageBody);
+        assertTrue(pageBody.contains("BeginBinary"));
+        assertTrue(pageBody.contains("JcP<@"));
+        assertTrue(pageBody.contains("10 0 li"));
     }
 
     @Test

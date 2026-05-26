@@ -68,8 +68,8 @@ for test_file in "${test_files[@]}"; do
     output_file="$OUTPUT_DIR/${base_name}_normal.svg"
     print_test_line "Processing $test_file (normal mode)" | tee -a "$LOG_FILE"
     
-    echo "Running: java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar \"$input_file\" \"$output_file\"" >> "$LOG_FILE"
-    java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar "$input_file" "$output_file" >> "$LOG_FILE" 2>&1
+    echo "Running: run_eps2svg $EPS2SVG_DISPLAY_OPTS \"$input_file\" \"$output_file\"" >> "$LOG_FILE"
+    run_eps2svg "$input_file" "$output_file" >> "$LOG_FILE" 2>&1
     
     if [ -f "$output_file" ] && [ -s "$output_file" ]; then
         print_pass | tee -a "$LOG_FILE"

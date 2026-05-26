@@ -30,12 +30,12 @@ public final class Matrix {
     /** PostScript {@code concat}: replaces this with this * other. */
     public Matrix postConcat(Matrix other) {
         return new Matrix(
-                a * other.a + b * other.c,
-                a * other.b + b * other.d,
-                c * other.a + d * other.c,
-                c * other.b + d * other.d,
-                e * other.a + f * other.c + other.e,
-                e * other.b + f * other.d + other.f);
+                a * other.a + c * other.b,
+                b * other.a + d * other.b,
+                a * other.c + c * other.d,
+                b * other.c + d * other.d,
+                a * other.e + c * other.f + e,
+                b * other.e + d * other.f + f);
     }
 
     public double transformX(double x, double y) {

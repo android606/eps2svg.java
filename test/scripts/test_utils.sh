@@ -131,4 +131,15 @@ print_test_summary() {
     fi
 }
 
+# Default display size for jar conversions in test scripts (viewBox unchanged).
+EPS2SVG_DISPLAY_OPTS="--min-width 100 --min-height 100 --max-width 8.5in --max-height 11in"
+
+run_eps2svg() {
+    local input_file="$1"
+    local output_file="$2"
+    shift 2
+    java -jar "$PROJECT_ROOT/target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar" \
+        $EPS2SVG_DISPLAY_OPTS "$@" "$input_file" "$output_file"
+}
+
 echo "Script name: $(get_script_name); Test Suite ID: $(get_test_suite_id)"

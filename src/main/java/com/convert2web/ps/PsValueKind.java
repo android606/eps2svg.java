@@ -10,6 +10,7 @@ public enum PsValueKind {
     ARRAY,
     PROCEDURE,
     DICTIONARY,
+    AGM_BINARY_INVOKE,
     RUNTIME_DICTIONARY,
     MARK,
     SAVE

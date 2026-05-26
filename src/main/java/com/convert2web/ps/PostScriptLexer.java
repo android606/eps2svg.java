@@ -57,6 +57,15 @@ public final class PostScriptLexer implements AutoCloseable {
         int startLine = line;
         int startColumn = column;
 
+        if (ch == '%') {
+            PostScriptToken binary = tryReadBeginBinaryComment();
+            if (binary != null) {
+                return binary;
+            }
+            readPercentLine();
+            return nextToken();
+        }
+
         if (ch == '[') {
             read();
             return new PostScriptToken(PostScriptTokenType.ARRAY_START, "[", startLine, startColumn);
@@ -288,6 +297,101 @@ public final class PostScriptLexer implements AutoCloseable {
         return sb.toString();
     }
 
+    /**
+     * Reads {@code %%BeginBinary: N} ... {@code %%EndBinary} as one executable AGM paint token.
+     * A line starting with {@code %} that is not {@code %%BeginBinary} is consumed as a comment.
+     */
+    private PostScriptToken tryReadBeginBinaryComment() throws IOException {
+        if (peek() != '%' || !reader.markSupported()) {
+            return null;
+        }
+        reader.mark(8192);
+        int savedLine = line;
+        int savedColumn = column;
+        String header = readPercentLine();
+        reader.reset();
+        line = savedLine;
+        column = savedColumn;
+        current = -2;
+        if (!header.trim().startsWith("%%BeginBinary")) {
+            return null;
+        }
+        int startLine = line;
+        int startColumn = column;
+        readPercentLine();
+        String operator = readLineTrimmed();
+        if (operator.isEmpty()) {
+            throw syntaxError("Missing AGM operator after %%BeginBinary");
+        }
+        StringBuilder payload = new StringBuilder();
+        while (true) {
+            String dataLine = readLineRaw();
+            if (dataLine == null) {
+                throw syntaxError("Unterminated %%BeginBinary block");
+            }
+            if ("%%EndBinary".equals(dataLine.trim())) {
+                break;
+            }
+            payload.append(dataLine);
+        }
+        return new PostScriptToken(
+                PostScriptTokenType.BEGIN_BINARY_INVOKE,
+                operator,
+                payload.toString(),
+                startLine,
+                startColumn);
+    }
+
+    private String readPercentLine() throws IOException {
+        StringBuilder sb = new StringBuilder();
+        sb.append((char) read());
+        while (peek() != -1 && peek() != '\n' && peek() != '\r') {
+            sb.append((char) read());
+        }
+        skipLineBreak();
+        return sb.toString();
+    }
+
+    private String readLineTrimmed() throws IOException {
+        String line = readLineRaw();
+        return line == null ? "" : line.trim();
+    }
+
+    private String readLineRaw() throws IOException {
+        if (peek() == -1) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        while (true) {
+            int ch = peek();
+            if (ch == -1) {
+                break;
+            }
+            if (ch == '\r') {
+                read();
+                if (peek() == '\n') {
+                    read();
+                }
+                break;
+            }
+            if (ch == '\n') {
+                read();
+                break;
+            }
+            sb.append((char) read());
+        }
+        return sb.toString();
+    }
+
+    private void skipLineBreak() throws IOException {
+        if (peek() == '\r') {
+            read();
+        }
+        if (peek() == '\n') {
+            read();
+        }
+    }
+
     private void skipWhitespaceAndComments() throws IOException {
         while (true) {
             int ch = peek();
@@ -298,15 +402,9 @@ public final class PostScriptLexer implements AutoCloseable {
                 read();
                 continue;
             }
+            // Leave '%' lines for {@link #nextToken()} (comments or {@code %%BeginBinary} blocks).
             if (ch == '%') {
-                read();
-                while (true) {
-                    int c = read();
-                    if (c == -1 || c == '\n' || c == '\r') {
-                        break;
-                    }
-                }
-                continue;
+                return;
             }
             if (ch == '/' && peekNext() == '/') {
                 read();

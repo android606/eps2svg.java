@@ -1,5 +1,7 @@
 package com.convert2web;
 
+import com.convert2web.render.SvgRenderOptions;
+
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -11,7 +13,15 @@ import java.util.logging.Logger;
 public class BinaryEpsInterpreter {
     private static final Logger logger = Logger.getLogger(BinaryEpsInterpreter.class.getName());
 
-    private final BinaryEpsConverter converter = new BinaryEpsConverter();
+    private final BinaryEpsConverter converter;
+
+    public BinaryEpsInterpreter() {
+        this(SvgRenderOptions.none());
+    }
+
+    public BinaryEpsInterpreter(SvgRenderOptions renderOptions) {
+        this.converter = new BinaryEpsConverter(renderOptions);
+    }
 
     /**
      * CLI helper: exit 0 if the file is DOS binary EPS, 1 otherwise.

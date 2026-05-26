@@ -29,7 +29,7 @@ class ManufacturedByEpsTest {
 
     @Test
     void binaryPageBodyProducesPaths() throws Exception {
-        var data = BinaryEpsReader.read("test/test_images/manufactured_by-binary.eps");
+        var data = BinaryEpsReader.read("test/test_images/ec_rep-binary.eps");
         String ps = new String(data.postScriptData, java.nio.charset.StandardCharsets.ISO_8859_1);
         String body = AdobeIllustratorPageRunner.extractPageBody(ps);
         var doc = AdobeIllustratorPageRunner.runPageBody(body, data.boundingBox);
@@ -39,10 +39,10 @@ class ManufacturedByEpsTest {
 
     @Test
     void convertsBinaryManufacturedByToVectorSvg() throws Exception {
-        Path output = Files.createTempFile("manufactured-by-binary", ".svg");
+        Path output = Files.createTempFile("ec-rep-binary", ".svg");
         try {
             assertTrue(new BinaryEpsConverter().tryConvert(
-                    "test/test_images/manufactured_by-binary.eps", output.toString()));
+                    "test/test_images/ec_rep-binary.eps", output.toString()));
             String svg = Files.readString(output);
             assertTrue(svg.contains("<path"));
             assertFalse(svg.contains("data:image/png;base64,"));
