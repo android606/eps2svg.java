@@ -1,5 +1,7 @@
 package com.convert2web.ps;
 
+import com.convert2web.model.SourceSpan;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -26,29 +28,30 @@ public final class PostScriptParser {
     public PsValue parseObject(PostScriptLexer lexer) throws IOException {
         PostScriptToken token = lexer.nextToken();
         if (token.getType() == PostScriptTokenType.BEGIN_BINARY_INVOKE) {
-            return new PsValue.AgmBinaryInvokeValue(token.getText(), token.getBinaryPayload());
+            return new PsValue.AgmBinaryInvokeValue(
+                    token.getText(), token.getBinaryPayload(), span(token));
         }
         switch (token.getType()) {
             case INTEGER:
-                return new PsValue.IntegerValue(parseIntegerText(token.getText()));
+                return new PsValue.IntegerValue(parseIntegerText(token.getText()), span(token));
             case REAL:
-                return new PsValue.RealValue(Double.parseDouble(token.getText()));
+                return new PsValue.RealValue(Double.parseDouble(token.getText()), span(token));
             case BOOLEAN:
-                return new PsValue.BooleanValue(Boolean.parseBoolean(token.getText()));
+                return new PsValue.BooleanValue(Boolean.parseBoolean(token.getText()), span(token));
             case STRING:
-                return new PsValue.StringValue(token.getText());
+                return new PsValue.StringValue(token.getText(), span(token));
             case HEX_STRING:
-                return new PsValue.HexStringValue(token.getText());
+                return new PsValue.HexStringValue(token.getText(), span(token));
             case LITERAL_NAME:
-                return PsValue.NameValue.literal(token.getText());
+                return PsValue.NameValue.literal(token.getText(), span(token));
             case NAME:
-                return PsValue.NameValue.executable(token.getText());
+                return PsValue.NameValue.executable(token.getText(), span(token));
             case ARRAY_START:
-                return parseArray(lexer);
+                return parseArray(lexer, token);
             case PROCEDURE_START:
-                return parseProcedure(lexer);
+                return parseProcedure(lexer, token);
             case DICTIONARY_START:
-                return parseDictionary(lexer);
+                return parseDictionary(lexer, token);
             case EOF:
                 throw new PostScriptParseException("Unexpected end of input");
             default:
@@ -56,35 +59,33 @@ public final class PostScriptParser {
         }
     }
 
-    private PsValue.ArrayValue parseArray(PostScriptLexer lexer) throws IOException {
+    private PsValue.ArrayValue parseArray(PostScriptLexer lexer, PostScriptToken start) throws IOException {
         List<PsValue> elements = new ArrayList<>();
         collectUntilDelimiter(lexer, PostScriptTokenType.ARRAY_END, elements);
-        return new PsValue.ArrayValue(elements);
+        return new PsValue.ArrayValue(elements, span(start));
     }
 
-    private PsValue.ProcedureValue parseProcedure(PostScriptLexer lexer) throws IOException {
+    private PsValue.ProcedureValue parseProcedure(PostScriptLexer lexer, PostScriptToken start) throws IOException {
         List<PsValue> body = new ArrayList<>();
         collectUntilDelimiter(lexer, PostScriptTokenType.PROCEDURE_END, body);
-        return new PsValue.ProcedureValue(body);
+        return new PsValue.ProcedureValue(body, span(start));
     }
 
-    private PsValue.DictionaryValue parseDictionary(PostScriptLexer lexer) throws IOException {
+    private PsValue.DictionaryValue parseDictionary(PostScriptLexer lexer, PostScriptToken start) throws IOException {
         Map<String, PsValue> entries = new LinkedHashMap<>();
         while (true) {
             PostScriptToken token = lexer.nextToken();
             if (token.getType() == PostScriptTokenType.DICTIONARY_END) {
-                return new PsValue.DictionaryValue(entries);
+                return new PsValue.DictionaryValue(entries, span(start));
             }
             if (token.getType() == PostScriptTokenType.EOF) {
                 throw new PostScriptParseException("Unterminated dictionary");
             }
-            lexer.pushBack(token);
-            PsValue keyValue = parseObject(lexer);
-            if (!(keyValue instanceof PsValue.NameValue)) {
-                throw new PostScriptParseException("Dictionary key must be a name, got " + keyValue.getKind());
+            if (token.getType() != PostScriptTokenType.LITERAL_NAME) {
+                throw new PostScriptParseException("Dictionary key must be a literal name");
             }
-            PsValue.NameValue key = (PsValue.NameValue) keyValue;
-            entries.put(key.getName(), parseObject(lexer));
+            String key = token.getText();
+            entries.put(key, parseObject(lexer));
         }
     }
 
@@ -94,22 +95,26 @@ public final class PostScriptParser {
             List<PsValue> target) throws IOException {
         while (true) {
             PostScriptToken token = lexer.nextToken();
-            if (token.getType() == PostScriptTokenType.EOF) {
-                throw new PostScriptParseException("Unterminated composite object, expected " + endType);
-            }
             if (token.getType() == endType) {
                 return;
+            }
+            if (token.getType() == PostScriptTokenType.EOF) {
+                throw new PostScriptParseException("Unterminated composite object");
             }
             lexer.pushBack(token);
             target.add(parseObject(lexer));
         }
     }
 
+    private static SourceSpan span(PostScriptToken token) {
+        return SourceSpan.of(token.getLine(), token.getColumn(), token.getOffset());
+    }
+
     private static long parseIntegerText(String text) throws PostScriptParseException {
         try {
             return Long.parseLong(text);
-        } catch (NumberFormatException e) {
-            throw new PostScriptParseException("Invalid integer: " + text, e);
+        } catch (NumberFormatException ex) {
+            throw new PostScriptParseException("Invalid integer: " + text, ex);
         }
     }
 }

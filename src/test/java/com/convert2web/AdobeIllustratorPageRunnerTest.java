@@ -152,6 +152,20 @@ class AdobeIllustratorPageRunnerTest {
     }
 
     @Test
+    void sanitizePreservesMsfAfterSubsetFont() {
+        String input = "%%EndBinary\ngrestore\nnp\n"
+                + "%ADOBeginSubsetFont: Raleway-SemiBold Initial\n"
+                + "/FontName /Raleway-SemiBold def\n"
+                + "%ADOEndSubsetFont\n"
+                + "SLWDMH+Raleway-SemiBold*1 [5.24472 0 0 -5.4903 0 0 ]msf\n"
+                + "17.5552 109.323 mo\n(Low)[2.95264 3.05762 0 ]xsh\n";
+        String sanitized = AdobeIllustratorPageRunner.sanitizeIllustratorPageText(input);
+        assertTrue(sanitized.contains("SLWDMH+Raleway-SemiBold*1 [5.24472 0 0 -5.4903 0 0 ]msf"));
+        assertTrue(sanitized.contains("(Low)"));
+        assertFalse(sanitized.contains("/FontName /Raleway-SemiBold def"));
+    }
+
+    @Test
     void sanitizeKeepsMoShowTextLines() throws Exception {
         String input = "9.0045 162.1917 mo\n(Blue Below)sh\n10 0 li\n";
         String sanitized = AdobeIllustratorPageRunner.sanitizeIllustratorPageText(input);
@@ -185,6 +199,36 @@ class AdobeIllustratorPageRunnerTest {
         assertTrue(pageBody.contains("BeginBinary"));
         assertTrue(pageBody.contains("JcP<@"));
         assertTrue(pageBody.contains("10 0 li"));
+    }
+
+    @Test
+    void otspMeterPageBodyOmitsSepcsGlyphFragments() throws Exception {
+        BinaryEpsReader.BinaryEpsData data =
+                BinaryEpsReader.read("test/test_images/test_OTSP_Meter_v16415663.eps");
+        String ps = new String(data.postScriptData, StandardCharsets.ISO_8859_1);
+        String pageBody = AdobeIllustratorPageRunner.extractPageBody(ps);
+        assertNotNull(pageBody);
+        assertTrue(pageBody.contains("(\\(Blue\\))") || pageBody.contains("(Blue)"));
+        assertFalse(pageBody.contains("17.7075 162.192 mo"));
+        assertFalse(pageBody.contains("(\\(Bl)"));
+    }
+
+    @Test
+    void stripSepcsGlyphTextPassesRemovesSplitLabelFragments() {
+        String block = ""
+                + "1 dict begin\n"
+                + "1 /0 /CSD get_res sepcs\n"
+                + "1 sep\n"
+                + "SLWDMJ+GothamXNarrow-BookItalic*1 [7.99998 0 0 -7.99998 0 0 ]msf\n"
+                + "9.00439 162.192 mo\n"
+                + "(\\(Bl)\n"
+                + "[2.73584 4.19141 0 ]xsh\n"
+                + "false sop\n"
+                + "end\n"
+                + "gsave\n";
+        String sanitized = AdobeIllustratorPageRunner.stripSepcsGlyphTextPasses(block);
+        assertFalse(sanitized.contains("(Bl)"));
+        assertTrue(sanitized.contains("gsave"));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.convert2web.ps;
 
 import com.convert2web.image.AgmEmbeddedImage;
+import com.convert2web.image.AgmPlaceholderTiles;
 import com.convert2web.image.AgmTileDecoder;
 import com.convert2web.model.Matrix;
 
@@ -39,11 +40,14 @@ final class AgmImagePaint {
             vm.pop();
             return;
         }
+        boolean paintsPendingText = AgmPlaceholderTiles.isBlankSepcsPlaceholder(
+                image.getPngBytes(), image.getWidth(), image.getHeight(), image.getCtm());
         vm.getDocumentRecorder().recordEmbeddedImage(
                 image.getWidth(),
                 image.getHeight(),
                 image.getCtm(),
-                image.getPngBytes());
+                image.getPngBytes(),
+                paintsPendingText);
         vm.pop();
     }
 

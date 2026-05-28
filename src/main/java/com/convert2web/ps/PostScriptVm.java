@@ -4,6 +4,7 @@ import com.convert2web.model.EpsDocument;
 import com.convert2web.model.EpsDocumentBuilder;
 import com.convert2web.model.Matrix;
 import com.convert2web.model.PaintStyle;
+import com.convert2web.model.SourceSpan;
 import com.convert2web.model.StrokeStyle;
 import com.convert2web.model.WindingRule;
 
@@ -13,6 +14,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Executes parsed PostScript {@link PsValue} programs.
@@ -26,7 +28,8 @@ public final class PostScriptVm {
     private final PsDictionary globalDict = new PsDictionary(0);
     private VmGraphicsState graphicsState = new VmGraphicsState();
     private final EpsDocumentBuilder documentBuilder = new EpsDocumentBuilder();
-    private final EpsDocumentRecorder documentRecorder = new EpsDocumentRecorder(documentBuilder);
+    private final EpsDocumentRecorder documentRecorder = new EpsDocumentRecorder(this, documentBuilder);
+    private SourceSpan currentSourceSpan;
     private String indexedPaletteContext;
     private int loopDepth;
     private boolean exitRequested;
@@ -68,7 +71,12 @@ public final class PostScriptVm {
         return indexedPaletteContext;
     }
 
+    public Optional<SourceSpan> getCurrentSourceSpan() {
+        return Optional.ofNullable(currentSourceSpan);
+    }
+
     public void execute(PsValue value) {
+        value.sourceSpan().ifPresent(span -> currentSourceSpan = span);
         if (value instanceof PsValue.AgmBinaryInvokeValue) {
             AgmImagePaint.apply(this, (PsValue.AgmBinaryInvokeValue) value);
             return;
@@ -93,6 +101,10 @@ public final class PostScriptVm {
         }
         PsValue bound = lookupValue(name);
         if (bound == null) {
+            if (isIllustratorFontAliasName(name)) {
+                push(PsValue.NameValue.literal(name));
+                return;
+            }
             throw new PostScriptVmException("undefined: " + name);
         }
         if (bound instanceof PsValue.NameValue && !((PsValue.NameValue) bound).isLiteral()) {
@@ -147,6 +159,7 @@ public final class PostScriptVm {
      * before running the shorthand preamble and page body.
      */
     public void resetForPageBody() {
+        documentRecorder.flushPendingText();
         operandStack.clear();
         graphicsStack.clear();
         graphicsState = new VmGraphicsState();
@@ -164,6 +177,7 @@ public final class PostScriptVm {
     }
 
     public EpsDocument getDocument() {
+        documentRecorder.flushPendingText();
         return documentBuilder.build();
     }
 
@@ -584,17 +598,19 @@ public final class PostScriptVm {
             vm.push(scaleFontDictionary(font, size));
         });
         register("setfont", vm -> setCurrentFont(vm, vm.pop()));
-        register("selectfont", vm -> {
-            double size = popNumber(vm);
-            popMatrix(vm);
-            setCurrentFont(vm, vm.pop());
-            vm.getGraphicsState().setFontSize(size);
+        register("selectfont", vm -> selectFontOperands(vm));
+        register("se", vm -> selectFontOperands(vm));
+        register("msf", vm -> makeSelectFontOperands(vm));
+        register("nf", vm -> { });
+        register("ct_VMDictPut", vm -> {
+            vm.pop();
+            vm.pop();
         });
         register("show", vm -> showText(vm));
         register("sh", vm -> showText(vm));
-        register("xsh", vm -> vm.pop());
+        register("xsh", vm -> xshowText(vm));
         register("xshow", vm -> {
-            vm.pop();
+            popNumberArray(vm);
             showText(vm);
         });
         register("setcachedevice", vm -> {
@@ -1166,13 +1182,23 @@ public final class PostScriptVm {
     }
 
     private static void setCurrentFont(PostScriptVm vm, PsValue font) {
+        if (font instanceof PsValue.NameValue) {
+            vm.graphicsState.setFontName(normalizeFontName(((PsValue.NameValue) font).getName()));
+            return;
+        }
+        if (font instanceof PsValue.StringValue) {
+            vm.graphicsState.setFontName(normalizeFontName(((PsValue.StringValue) font).getValue()));
+            return;
+        }
         if (!(font instanceof PsValue.RuntimeDictionaryValue)) {
             throw new PostScriptVmException("typecheck");
         }
         PsDictionary dict = ((PsValue.RuntimeDictionaryValue) font).getDictionary();
         PsValue nameValue = dict.get("FontName");
         if (nameValue instanceof PsValue.NameValue) {
-            vm.graphicsState.setFontName(((PsValue.NameValue) nameValue).getName());
+            vm.graphicsState.setFontName(normalizeFontName(((PsValue.NameValue) nameValue).getName()));
+        } else if (nameValue instanceof PsValue.StringValue) {
+            vm.graphicsState.setFontName(normalizeFontName(((PsValue.StringValue) nameValue).getValue()));
         }
         PsValue sizeValue = dict.get("FontSize");
         if (sizeValue != null) {
@@ -1180,25 +1206,126 @@ public final class PostScriptVm {
         }
     }
 
+    private static boolean isIllustratorFontAliasName(String name) {
+        return name.startsWith("SLWDM") || name.contains("+");
+    }
+
+    private static String normalizeFontName(String fontName) {
+        if (fontName == null || fontName.isEmpty()) {
+            return "Helvetica";
+        }
+        int plus = fontName.indexOf('+');
+        if (plus >= 0 && plus < fontName.length() - 1) {
+            fontName = fontName.substring(plus + 1);
+        }
+        int star = fontName.indexOf('*');
+        if (star > 0) {
+            fontName = fontName.substring(0, star);
+        }
+        return fontName;
+    }
+
+    private static void selectFontOperands(PostScriptVm vm) {
+        Matrix textMatrix = popMatrix(vm);
+        double size = popNumber(vm);
+        setCurrentFont(vm, vm.resolveFontOperand(vm.pop()));
+        VmGraphicsState state = vm.graphicsState;
+        state.setTextMatrix(textMatrix);
+        state.setFontSize(size > 0 ? size : fontSizeFromMatrix(textMatrix));
+    }
+
+    /** Illustrator {@code FontName [a b c d e f] msf}. */
+    private static void makeSelectFontOperands(PostScriptVm vm) {
+        Matrix textMatrix = popMatrix(vm);
+        setCurrentFont(vm, vm.resolveFontOperand(vm.pop()));
+        VmGraphicsState state = vm.graphicsState;
+        state.setTextMatrix(textMatrix);
+        state.setFontSize(fontSizeFromMatrix(textMatrix));
+    }
+
+    /** Executable font alias ({@code SLWDMH+Raleway-SemiBold*1}) or literal/dict font operand. */
+    private PsValue resolveFontOperand(PsValue font) {
+        if (font instanceof PsValue.NameValue) {
+            PsValue.NameValue name = (PsValue.NameValue) font;
+            if (!name.isLiteral()) {
+                PsValue bound = lookupValue(name.getName());
+                if (bound != null) {
+                    return bound;
+                }
+                return PsValue.NameValue.literal(name.getName());
+            }
+        }
+        return font;
+    }
+
+    private static double fontSizeFromMatrix(Matrix textMatrix) {
+        return Math.hypot(textMatrix.getA(), textMatrix.getB());
+    }
+
+    private static void xshowText(PostScriptVm vm) {
+        double[] advances = popNumberArray(vm);
+        PsValue value = vm.pop();
+        if (!(value instanceof PsValue.StringValue)) {
+            throw new PostScriptVmException("typecheck");
+        }
+        showTextString(vm, ((PsValue.StringValue) value).getValue(), advances);
+    }
+
     private static void showText(PostScriptVm vm) {
         PsValue value = vm.pop();
         if (!(value instanceof PsValue.StringValue)) {
             throw new PostScriptVmException("typecheck");
         }
-        String text = ((PsValue.StringValue) value).getValue();
+        showTextString(vm, ((PsValue.StringValue) value).getValue(), null);
+    }
+
+    private static void showTextString(PostScriptVm vm, String text, double[] glyphAdvances) {
         if (text.isEmpty()) {
             return;
         }
+        text = IllustratorTextEncoding.normalizeForSvg(text);
         VmGraphicsState state = vm.graphicsState;
+        double x = state.getCurrentX();
+        double y = state.getCurrentY();
+        // Anchor is in operand space; graphics CTM is applied at SVG render time.
+        // Text matrix scale is reflected in fontSize, not in command CTM (avoids double transform).
         vm.documentRecorder.recordText(
                 text,
-                state.getCurrentX(),
-                state.getCurrentY(),
+                x,
+                y,
                 state.getFontName(),
                 state.getFontSize(),
-                state.getFillColor(),
-                state.getCtm());
+                IllustratorTextPaint.normalizeFillForSvg(state.getFillColor(), state.getFontName()),
+                state.getCtm(),
+                glyphAdvances);
+        double advance = totalGlyphAdvance(text, glyphAdvances, state.getFontSize());
+        state.moveTo(x + advance, y);
         state.clearIfOnlyMoveToPath();
+    }
+
+    private static double totalGlyphAdvance(String text, double[] glyphAdvances, double fontSize) {
+        if (glyphAdvances != null && glyphAdvances.length > 0) {
+            double sum = 0;
+            int count = Math.min(text.length(), glyphAdvances.length);
+            for (int i = 0; i < count; i++) {
+                sum += glyphAdvances[i];
+            }
+            return sum;
+        }
+        return fontSize * 0.55 * text.length();
+    }
+
+    private static double[] popNumberArray(PostScriptVm vm) {
+        PsValue value = vm.pop();
+        if (!(value instanceof PsValue.ArrayValue)) {
+            throw new PostScriptVmException("typecheck");
+        }
+        List<PsValue> elements = ((PsValue.ArrayValue) value).getElements();
+        double[] numbers = new double[elements.size()];
+        for (int i = 0; i < elements.size(); i++) {
+            numbers[i] = numberFromValue(elements.get(i));
+        }
+        return numbers;
     }
 
     private static PsValue numberValue(double value) {

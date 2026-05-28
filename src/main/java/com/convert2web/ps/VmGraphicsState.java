@@ -20,6 +20,7 @@ public final class VmGraphicsState {
     private double lineWidth = 1.0;
     private String fontName = "Helvetica";
     private double fontSize = 12.0;
+    private Matrix textMatrix = Matrix.identity();
     private final List<PathSegment> pathSegments = new ArrayList<>();
     private double currentX;
     private double currentY;
@@ -36,6 +37,7 @@ public final class VmGraphicsState {
         copy.lineWidth = lineWidth;
         copy.fontName = fontName;
         copy.fontSize = fontSize;
+        copy.textMatrix = textMatrix;
         copy.pathSegments.addAll(pathSegments);
         copy.currentX = currentX;
         copy.currentY = currentY;
@@ -118,6 +120,14 @@ public final class VmGraphicsState {
 
     public void setFontSize(double fontSize) {
         this.fontSize = fontSize;
+    }
+
+    public Matrix getTextMatrix() {
+        return textMatrix;
+    }
+
+    public void setTextMatrix(Matrix textMatrix) {
+        this.textMatrix = textMatrix == null ? Matrix.identity() : textMatrix;
     }
 
     public void setLineWidth(double lineWidth) {

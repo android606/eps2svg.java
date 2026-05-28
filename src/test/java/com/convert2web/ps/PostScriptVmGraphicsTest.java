@@ -14,11 +14,16 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Model-level tests: graphics operators append to {@link EpsDocument}.
  */
 class PostScriptVmGraphicsTest {
+
+    private static final String ILLUSTRATOR_TEXT_PREAMBLE =
+            "userdict begin /mo { moveto } bind def /sh { show } bind def /xsh { xsh } bind def ";
 
     @Test
     void fillRecordsClosedTrianglePath() {
@@ -266,6 +271,138 @@ class PostScriptVmGraphicsTest {
         assertEquals(162.1917, text.getY(), 1e-9);
     }
 
+    @Test
+    void pendingLegendTextWaitsForCoverTileAcrossOtherImages() {
+        PostScriptVm vm = new PostScriptVm();
+        vm.getDocumentRecorder().recordText(
+                "(Blue)", 9, 162, "GothamXNarrow-BookItalic", 8,
+                PaintStyle.rgb(0.1, 0.1, 0.1), Matrix.identity());
+        vm.getDocumentRecorder().recordEmbeddedImage(
+                82, 29, new Matrix(0.24, 0, 0, 0.24, 80, 10), new byte[] {1});
+        vm.getDocumentRecorder().recordEmbeddedImage(
+                82, 29, new Matrix(0.24, 0, 0, 0.24, 9.24, 161.08), new byte[] {1}, true);
+
+        EpsDocument doc = vm.getDocument();
+
+        assertInstanceOf(GraphicsCommand.EmbeddedImage.class, doc.getCommands().get(0));
+        assertInstanceOf(GraphicsCommand.EmbeddedImage.class, doc.getCommands().get(1));
+        assertInstanceOf(GraphicsCommand.Text.class, doc.getCommands().get(2));
+    }
+
+    @Test
+    void textDoesNotMoveAfterNormalTiles() {
+        PostScriptVm vm = new PostScriptVm();
+        vm.getDocumentRecorder().recordText(
+                "In Range", 46, 109, "Raleway-SemiBold", 5.2,
+                PaintStyle.rgb(1, 1, 1), Matrix.identity());
+        vm.getDocumentRecorder().recordEmbeddedImage(
+                82, 29, new Matrix(0.24, 0, 0, 0.24, 46, 109), new byte[] {1});
+
+        EpsDocument doc = vm.getDocument();
+
+        assertInstanceOf(GraphicsCommand.Text.class, doc.getCommands().get(0));
+        assertInstanceOf(GraphicsCommand.EmbeddedImage.class, doc.getCommands().get(1));
+    }
+
+    @Test
+    void smallRalewayTextPaintsAfterPairedCoverTile() {
+        PostScriptVm vm = new PostScriptVm();
+        vm.getDocumentRecorder().recordText(
+                "B", 149.71, 104.304, "Raleway-Regular", 4.75,
+                PaintStyle.rgb(0, 0, 0), Matrix.identity());
+        vm.getDocumentRecorder().recordEmbeddedImage(
+                12, 17, new Matrix(0.24, 0, 0, 0.2204, 149.935, 100.7631), new byte[] {1}, true);
+
+        EpsDocument doc = vm.getDocument();
+
+        assertInstanceOf(GraphicsCommand.EmbeddedImage.class, doc.getCommands().get(0));
+        assertInstanceOf(GraphicsCommand.Text.class, doc.getCommands().get(1));
+    }
+
+    @Test
+    void pendingTextPaintsAfterPairedPlaceholderImage() {
+        PostScriptVm vm = new PostScriptVm();
+        vm.getDocumentRecorder().recordText(
+                "(Blue)", 9, 162, "GothamXNarrow-BookItalic", 8,
+                PaintStyle.rgb(0.1, 0.1, 0.1), Matrix.identity());
+        vm.getDocumentRecorder().recordEmbeddedImage(
+                82, 29, new Matrix(0.24, 0, 0, 0.24, 9.24, 161.08), new byte[] {1}, true);
+
+        EpsDocument doc = vm.getDocument();
+
+        assertInstanceOf(GraphicsCommand.EmbeddedImage.class, doc.getCommands().get(0));
+        assertInstanceOf(GraphicsCommand.Text.class, doc.getCommands().get(1));
+    }
+
+    @Test
+    void xshRecordsStringWithGlyphAdvances() {
+        EpsDocument doc = runDocument(
+                ILLUSTRATOR_TEXT_PREAMBLE
+                        + "10 20 mo (AB) [3 4 0] xsh");
+
+        assertEquals(1, doc.getCommands().size());
+        GraphicsCommand.Text text = assertInstanceOf(GraphicsCommand.Text.class, doc.getCommands().get(0));
+        assertEquals("AB", text.getText());
+        assertEquals(10.0, text.getX(), 1e-9);
+        assertEquals(20.0, text.getY(), 1e-9);
+        assertNotNull(text.getGlyphAdvances());
+        assertEquals(3, text.getGlyphAdvances().length);
+        assertEquals(3.0, text.getGlyphAdvances()[0], 1e-9);
+        assertEquals(4.0, text.getGlyphAdvances()[1], 1e-9);
+    }
+
+    @Test
+    void xshNormalizesIllustratorWordSeparatorInInRange() {
+        EpsDocument doc = runDocument(
+                ILLUSTRATOR_TEXT_PREAMBLE
+                        + "SLWDMG+Raleway-Regular*1 [5.24472 0 0 -5.4903 0 0 ]msf "
+                        + "46.0044 109.181 mo (In\\312Range) "
+                        + "[1.42676 3.13086 1.29541 3.43018 2.95801 3.13086 3.29932 0] xsh");
+
+        GraphicsCommand.Text label = doc.getCommands().stream()
+                .filter(GraphicsCommand.Text.class::isInstance)
+                .map(GraphicsCommand.Text.class::cast)
+                .filter(t -> t.getText().contains("Range"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("In Range", label.getText());
+    }
+
+    @Test
+    void msfSetsRalewaySemiBoldForLowLabel() {
+        EpsDocument doc = runDocument(
+                ILLUSTRATOR_TEXT_PREAMBLE
+                        + "SLWDMH+Raleway-SemiBold*1 [5.24472 0 0 -5.4903 0 0 ]msf "
+                        + "17.5552 109.323 mo (Low) [2.95264 3.05762 0] xsh");
+
+        GraphicsCommand.Text low = doc.getCommands().stream()
+                .filter(GraphicsCommand.Text.class::isInstance)
+                .map(GraphicsCommand.Text.class::cast)
+                .filter(t -> "Low".equals(t.getText()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Raleway-SemiBold", low.getFontName());
+        assertEquals(5.24472, low.getFontSize(), 1e-3);
+        assertTrue(low.getCtm().equals(Matrix.identity()), "text matrix must not be stored on command CTM");
+    }
+
+    @Test
+    void msfAndXshMatchIllustratorBeforeMealSnippet() {
+        EpsDocument doc = runDocument(
+                ILLUSTRATOR_TEXT_PREAMBLE
+                        + "147.752 95.0576 mo (B) sh "
+                        + "151.015 95.0576 mo (efore Meal) "
+                        + "[2.73242 1.77344 2.7002 2.26855 2.5957 1.09863 3.96973 2.75293 2.65723 0] xsh");
+
+        assertEquals(2, doc.getCommands().size());
+        GraphicsCommand.Text b = assertInstanceOf(GraphicsCommand.Text.class, doc.getCommands().get(0));
+        GraphicsCommand.Text rest = assertInstanceOf(GraphicsCommand.Text.class, doc.getCommands().get(1));
+        assertEquals("B", b.getText());
+        assertEquals("efore Meal", rest.getText());
+        assertEquals(151.015, rest.getX(), 1e-9);
+        assertTrue(rest.hasGlyphAdvances());
+    }
+
     private static void assertMoveTo(Path path, int index, double x, double y) {
         PathSegment.MoveTo move = assertInstanceOf(PathSegment.MoveTo.class, path.getSegments().get(index));
         assertEquals(x, move.getX(), 1e-9);
@@ -276,6 +413,42 @@ class PostScriptVmGraphicsTest {
         PathSegment.LineTo line = assertInstanceOf(PathSegment.LineTo.class, path.getSegments().get(index));
         assertEquals(x, line.getX(), 1e-9);
         assertEquals(y, line.getY(), 1e-9);
+    }
+
+    @Test
+    void recordsSourceSpanOnClipOperator() {
+        String source = "0 0 moveto 10 0 lineto 10 10 lineto closepath clip";
+        EpsDocument doc = runDocument(source);
+
+        GraphicsCommand.Clip clip = assertInstanceOf(GraphicsCommand.Clip.class, doc.getCommands().get(0));
+        assertTrue(clip.getSourceSpan().isPresent());
+        assertEquals(1, clip.getSourceSpan().get().line());
+    }
+
+    @Test
+    void recordsSourceSpanOnPopClipFromGrestore() {
+        String source =
+                "0 0 moveto 10 0 lineto 10 10 lineto closepath clip "
+                        + "gsave 0 0 moveto 5 0 lineto 5 5 lineto closepath clip grestore";
+        EpsDocument doc = runDocument(source);
+
+        GraphicsCommand.PopClip pop = doc.getCommands().stream()
+                .filter(GraphicsCommand.PopClip.class::isInstance)
+                .map(GraphicsCommand.PopClip.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertTrue(pop.getSourceSpan().isPresent());
+    }
+
+    @Test
+    void recordsSourceSpanOnFillOperator() {
+        String source = "0 0 moveto 10 0 lineto 10 10 lineto 0 10 lineto closepath fill";
+        EpsDocument doc = runDocument(source);
+
+        GraphicsCommand.Fill fill = assertInstanceOf(GraphicsCommand.Fill.class, doc.getCommands().get(0));
+        assertTrue(fill.getSourceSpan().isPresent(), fill.getSourceSpan().toString());
+        assertEquals(1, fill.getSourceSpan().get().line());
+        assertTrue(fill.getSourceSpan().get().offset() > 0);
     }
 
     private static EpsDocument runDocument(String source) {

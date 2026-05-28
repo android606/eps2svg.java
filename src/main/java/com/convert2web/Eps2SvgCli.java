@@ -54,7 +54,13 @@ public final class Eps2SvgCli {
                 help = true;
                 continue;
             }
-            if (isOption(arg)) {
+            if (isFlag(arg)) {
+                if ("--trace-source".equals(arg)) {
+                    options.emitSourceTrace(true);
+                }
+                continue;
+            }
+            if (isValuedOption(arg)) {
                 String value = requireValue(args, i, arg);
                 i++;
                 switch (arg) {
@@ -83,7 +89,11 @@ public final class Eps2SvgCli {
         return new ParsedCommand(input, output, options.build(), help);
     }
 
-    private static boolean isOption(String arg) {
+    private static boolean isFlag(String arg) {
+        return "--trace-source".equals(arg);
+    }
+
+    private static boolean isValuedOption(String arg) {
         return "--min-width".equals(arg)
                 || "--min-height".equals(arg)
                 || "--max-width".equals(arg)
@@ -108,6 +118,7 @@ public final class Eps2SvgCli {
         out.println("  --min-height <len>   Minimum root height");
         out.println("  --max-width <len>    Maximum root width (overrides conflicting min)");
         out.println("  --max-height <len>   Maximum root height (overrides conflicting min)");
+        out.println("  --trace-source       EPS line/column/offset on graphics elements (data-* + comments)");
         out.println();
         out.println("Display limits scale width/height proportionally; viewBox is unchanged.");
         out.println("Examples:");

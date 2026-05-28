@@ -1,11 +1,31 @@
-# Maven build directory
+# Maven build output
 target/
 
-# Test output directories
+# Compiled classes outside Maven (if any)
+*.class
+
+# Test output
 test/output/
 test/output/test_paths/
 
-# Logs
+# macOS
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs and local tooling
 *.log
-target/eps2svg-*.jar
 .aider*
+
+# IDE (optional local settings)
+.idea/
+*.iml
+.vscode/
+*.swp
+*~

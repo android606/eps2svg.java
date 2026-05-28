@@ -42,6 +42,14 @@ class PostScriptLexerTest {
     }
 
     @Test
+    void tokenizesIllustratorOctalWordSeparator() throws Exception {
+        List<PostScriptToken> tokens = lex("(In\\312Range)");
+
+        assertEquals("In\u00caRange", tokens.get(0).getText());
+        assertEquals("In Range", IllustratorTextEncoding.normalizeForSvg(tokens.get(0).getText()));
+    }
+
+    @Test
     void tokenizesAscii85String() throws Exception {
         List<PostScriptToken> tokens = lex("<~Artifex~> 10");
 
@@ -139,6 +147,21 @@ class PostScriptLexerTest {
                 "INTEGER(0)",
                 "NAME(mo)"),
                 stringify(tokens));
+    }
+
+    @Test
+    void recordsLineColumnAndOffset() throws Exception {
+        List<PostScriptToken> tokens = lex("10 moveto");
+
+        PostScriptToken ten = tokens.get(0);
+        assertEquals(1, ten.getLine());
+        assertEquals(1, ten.getColumn());
+        assertEquals(0, ten.getOffset());
+
+        PostScriptToken moveto = tokens.get(1);
+        assertEquals(1, moveto.getLine());
+        assertEquals(4, moveto.getColumn());
+        assertEquals(3, moveto.getOffset());
     }
 
     private static List<PostScriptToken> lex(String input) throws Exception {

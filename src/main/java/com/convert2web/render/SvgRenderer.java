@@ -7,8 +7,12 @@ import com.convert2web.model.Matrix;
 import com.convert2web.model.PaintStyle;
 import com.convert2web.model.Path;
 import com.convert2web.model.PathBounds;
+import com.convert2web.model.SourceSpan;
 import com.convert2web.model.StrokeStyle;
 import com.convert2web.model.WindingRule;
+import com.convert2web.ps.IllustratorTextPaint;
+
+import java.util.Optional;
 
 import java.io.IOException;
 import java.io.Writer;
@@ -28,10 +32,12 @@ public final class SvgRenderer {
 
     private static final class ClipFrame {
         private final String id;
+        private final SourceSpan sourceSpan;
         private boolean opened;
 
-        private ClipFrame(String id) {
+        private ClipFrame(String id, SourceSpan sourceSpan) {
             this.id = id;
+            this.sourceSpan = sourceSpan;
         }
     }
 
@@ -86,12 +92,15 @@ public final class SvgRenderer {
                 GraphicsCommand.BeginLayerGroup group = (GraphicsCommand.BeginLayerGroup) command;
                 String layerId = sanitizeLayerId(group.getLayerId());
                 layerGroupIds.push(layerId);
+                appendSourceTracePrologue(body, group, "layer-begin", options);
                 body.append("<g id=\"").append(escapeAttr(elementIds.next())).append("\"");
+                body.append(sourceTraceAttrs(group, options));
                 body.append(" data-layer-id=\"").append(escapeAttr(layerId)).append("\">\n");
                 continue;
             }
             if (command instanceof GraphicsCommand.EndLayerGroup) {
                 if (!layerGroupIds.isEmpty()) {
+                    appendSourceTracePrologue(body, command, "layer-end", options);
                     body.append("</g>\n");
                     layerGroupIds.pop();
                 }
@@ -100,14 +109,15 @@ public final class SvgRenderer {
             if (command instanceof GraphicsCommand.Clip) {
                 GraphicsCommand.Clip clip = (GraphicsCommand.Clip) command;
                 String clipId = elementIds.next();
-                appendClipPath(defs, clipId, clip, elementIds);
-                clipFrames.push(new ClipFrame(clipId));
+                appendClipPath(defs, clipId, clip, elementIds, options);
+                clipFrames.push(new ClipFrame(clipId, clip.getSourceSpan().orElse(null)));
                 continue;
             }
             if (command instanceof GraphicsCommand.PopClip) {
                 if (!clipFrames.isEmpty()) {
                     ClipFrame frame = clipFrames.pop();
                     if (frame.opened) {
+                        appendSourceTracePrologue(body, command, "pop-clip", options);
                         body.append("</g>\n");
                     }
                 }
@@ -117,17 +127,27 @@ public final class SvgRenderer {
                 GraphicsCommand.EmbeddedImage embeddedImage =
                         (GraphicsCommand.EmbeddedImage) command;
                 if (!embeddedImage.getClipStack().isEmpty()) {
-                String paint = embeddedImageElement(
-                        defs, embeddedImage, deviceYDown, pageUry, elementIds);
-                if (!paint.isEmpty()) {
-                    body.append(paint);
-                }
-                continue;
+                    String paint = embeddedImageElement(
+                            defs, embeddedImage, deviceYDown, pageUry, elementIds, options);
+                    if (!paint.isEmpty()) {
+                        body.append(paint);
+                    }
+                    continue;
                 }
             }
-            String paint = renderPaintCommand(command, deviceYDown, pageUry, elementIds);
+            if (command instanceof GraphicsCommand.Text) {
+                GraphicsCommand.Text text = (GraphicsCommand.Text) command;
+                if (!text.getClipStack().isEmpty()) {
+                    String paint = clippedTextElement(defs, text, elementIds, options);
+                    if (!paint.isEmpty()) {
+                        body.append(paint);
+                    }
+                    continue;
+                }
+            }
+            String paint = renderPaintCommand(command, deviceYDown, pageUry, elementIds, options);
             if (!paint.isEmpty()) {
-                openPendingClips(body, clipFrames, elementIds);
+                openPendingClips(body, clipFrames, elementIds, options);
                 body.append(paint);
             }
         }
@@ -176,11 +196,16 @@ public final class SvgRenderer {
     }
 
     private static void openPendingClips(
-            StringBuilder body, Deque<ClipFrame> clipFrames, ElementIds elementIds) {
+            StringBuilder body,
+            Deque<ClipFrame> clipFrames,
+            ElementIds elementIds,
+            SvgRenderOptions options) {
         for (java.util.Iterator<ClipFrame> iterator = clipFrames.descendingIterator(); iterator.hasNext();) {
             ClipFrame frame = iterator.next();
             if (!frame.opened) {
+                appendSourceTracePrologue(body, frame.sourceSpan, "clip-apply", options);
                 body.append("<g id=\"").append(escapeAttr(elementIds.next())).append("\"");
+                body.append(sourceTraceAttrs(frame.sourceSpan, options));
                 body.append(" clip-path=\"url(#").append(frame.id).append(")\">\n");
                 frame.opened = true;
             }
@@ -196,7 +221,11 @@ public final class SvgRenderer {
     }
 
     private static void appendClipPath(
-            StringBuilder defs, String id, GraphicsCommand.Clip clip, ElementIds elementIds) {
+            StringBuilder defs,
+            String id,
+            GraphicsCommand.Clip clip,
+            ElementIds elementIds,
+            SvgRenderOptions options) {
         Matrix ctm = clip.getCtm();
         String d = ctm.equals(Matrix.identity())
                 ? SvgPathEncoder.toPathData(clip.getPath())
@@ -204,9 +233,13 @@ public final class SvgRenderer {
         if (d.isEmpty()) {
             return;
         }
-        defs.append("<clipPath id=\"").append(id).append("\">\n");
-        defs.append("  <path id=\"").append(escapeAttr(elementIds.next())).append("\"");
-        defs.append(" d=\"").append(escapeAttr(d)).append("\"");
+        appendSourceTracePrologue(defs, clip, "clip", options);
+        defs.append("<clipPath id=\"").append(id).append('"');
+        defs.append(sourceTraceAttrs(clip, options));
+        defs.append(">\n");
+        defs.append("  <path id=\"").append(escapeAttr(elementIds.next())).append('"');
+        defs.append(sourceTraceAttrs(clip, options));
+        defs.append(" d=\"").append(escapeAttr(d)).append('"');
         defs.append(" clip-rule=\"").append(windingRuleAttr(clip.getWindingRule())).append("\"/>\n");
         defs.append("</clipPath>\n");
     }
@@ -215,58 +248,139 @@ public final class SvgRenderer {
             GraphicsCommand command,
             boolean deviceYDown,
             double pageUry,
-            ElementIds elementIds) {
+            ElementIds elementIds,
+            SvgRenderOptions options) {
         Matrix ctm = command.getCtm();
         String transform = matrixTransform(ctm);
         if (command instanceof GraphicsCommand.Fill) {
             GraphicsCommand.Fill fill = (GraphicsCommand.Fill) command;
-            return pathElement(fill.getPath(), transform, elementIds, paintAttrs(fill.getFill(), true)
-                    + " fill-rule=\"" + windingRuleAttr(fill.getWindingRule()) + "\"");
+            return pathElement(fill, "fill", fill.getPath(), transform, elementIds,
+                    paintAttrs(fill.getFill(), true)
+                            + " fill-rule=\"" + windingRuleAttr(fill.getWindingRule()) + "\"",
+                    options);
         }
         if (command instanceof GraphicsCommand.Stroke) {
             GraphicsCommand.Stroke stroke = (GraphicsCommand.Stroke) command;
-            return pathElement(stroke.getPath(), transform, elementIds, paintAttrs(stroke.getStrokeColor(), false)
-                    + strokeAttrs(stroke.getStrokeStyle()));
+            return pathElement(stroke, "stroke", stroke.getPath(), transform, elementIds,
+                    paintAttrs(stroke.getStrokeColor(), false) + strokeAttrs(stroke.getStrokeStyle()),
+                    options);
         }
         if (command instanceof GraphicsCommand.RasterPlaceholder) {
             GraphicsCommand.RasterPlaceholder placeholder = (GraphicsCommand.RasterPlaceholder) command;
-            return rasterPlaceholderElement(placeholder, transform, elementIds);
+            return rasterPlaceholderElement(placeholder, transform, elementIds, options);
         }
         if (command instanceof GraphicsCommand.EmbeddedImage) {
             return embeddedImageElement(
-                    null, (GraphicsCommand.EmbeddedImage) command, deviceYDown, pageUry, elementIds);
+                    null, (GraphicsCommand.EmbeddedImage) command, deviceYDown, pageUry, elementIds, options);
         }
         if (command instanceof GraphicsCommand.Text) {
-            return textElement((GraphicsCommand.Text) command, transform, elementIds);
+            return textElement((GraphicsCommand.Text) command, elementIds, options);
         }
         return "";
     }
 
-    private static String textElement(GraphicsCommand.Text text, String transform, ElementIds elementIds) {
+    private static String textElement(
+            GraphicsCommand.Text text,
+            ElementIds elementIds,
+            SvgRenderOptions options) {
         if (text.getText().isEmpty()) {
             return "";
         }
-        double fontSize = effectiveFontSize(text.getFontSize(), text.getCtm());
+        double fontSize = text.getFontSize();
+        double x = text.getX();
+        double y = text.getY();
+        Matrix ctm = text.getCtm();
         StringBuilder element = new StringBuilder();
-        if (!transform.isEmpty()) {
-            element.append("<g");
-            element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
-            element.append(" transform=\"").append(escapeAttr(transform)).append('"');
-            element.append(">\n  ");
-        }
+        appendSourceTracePrologue(element, text, "text", options);
         element.append("<text");
         element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
-        element.append(" x=\"").append(SvgPathEncoder.format(text.getX())).append('"');
-        element.append(" y=\"").append(SvgPathEncoder.format(text.getY())).append('"');
+        element.append(sourceTraceAttrs(text, options));
+        String positionTransform = textPositionTransform(ctm, x, y);
+        if (!positionTransform.isEmpty()) {
+            element.append(" transform=\"").append(escapeAttr(positionTransform)).append('"');
+            element.append(" x=\"0\" y=\"0\"");
+        } else {
+            element.append(" x=\"").append(SvgPathEncoder.format(x)).append('"');
+            element.append(" y=\"").append(SvgPathEncoder.format(y)).append('"');
+        }
         element.append(" font-size=\"").append(SvgPathEncoder.format(fontSize)).append('"');
         element.append(" font-family=\"").append(escapeAttr(svgFontFamily(text.getFontName()))).append('"');
-        element.append(paintAttrs(text.getFill(), true));
-        element.append('>').append(escapeText(text.getText())).append("</text>");
-        if (!transform.isEmpty()) {
-            element.append("\n</g>");
+        String fontWeight = svgFontWeight(text.getFontName());
+        if (!fontWeight.isEmpty()) {
+            element.append(" font-weight=\"").append(fontWeight).append('"');
         }
-        element.append('\n');
+        if (IllustratorTextPaint.isItalicFont(text.getFontName())) {
+            element.append(" font-style=\"italic\"");
+        }
+        element.append(paintAttrs(text.getFill(), true));
+        element.append('>');
+        appendTextContent(element, text);
+        element.append("</text>\n");
         return element.toString();
+    }
+
+    private static String clippedTextElement(
+            StringBuilder defs,
+            GraphicsCommand.Text text,
+            ElementIds elementIds,
+            SvgRenderOptions options) {
+        if (defs == null || text.getClipStack().isEmpty()) {
+            return textElement(text, elementIds, options);
+        }
+        StringBuilder element = new StringBuilder();
+        for (GraphicsCommand.Clip clip : text.getClipStack()) {
+            String clipId = elementIds.next();
+            appendClipPath(defs, clipId, clip, elementIds, options);
+            appendSourceTracePrologue(element, clip, "clip-apply", options);
+            element.append("<g id=\"").append(escapeAttr(elementIds.next())).append('"');
+            element.append(sourceTraceAttrs(clip, options));
+            element.append(" clip-path=\"url(#").append(clipId).append(")\">\n");
+        }
+        element.append(textElement(text, elementIds, options));
+        for (int i = 0; i < text.getClipStack().size(); i++) {
+            element.append("</g>\n");
+        }
+        return element.toString();
+    }
+
+    /**
+     * Illustrator-style text positioning: {@code translate(x,y)} plus linear CTM when needed.
+     * Operand-space anchor must not be multiplied by msf/text-matrix scale (that is font-size).
+     */
+    private static String textPositionTransform(Matrix ctm, double x, double y) {
+        if (ctm == null || ctm.equals(Matrix.identity())) {
+            return "translate(" + SvgPathEncoder.format(x) + ' ' + SvgPathEncoder.format(y) + ')';
+        }
+        return "matrix("
+                + SvgPathEncoder.format(ctm.getA()) + ' '
+                + SvgPathEncoder.format(ctm.getB()) + ' '
+                + SvgPathEncoder.format(ctm.getC()) + ' '
+                + SvgPathEncoder.format(ctm.getD()) + ' '
+                + SvgPathEncoder.format(ctm.transformX(x, y)) + ' '
+                + SvgPathEncoder.format(ctm.transformY(x, y)) + ')';
+    }
+
+    private static void appendTextContent(StringBuilder element, GraphicsCommand.Text text) {
+        String value = text.getText();
+        double[] advances = text.getGlyphAdvances();
+        if (advances == null || advances.length == 0 || value.length() <= 1) {
+            element.append(escapeText(value));
+            return;
+        }
+        // Illustrator xsh / PostScript xshow: each offset is the full x displacement to the
+        // next glyph origin (replaces font default width). SVG dx adds to default width, so use
+        // absolute per-glyph x coordinates instead.
+        StringBuilder xPositions = new StringBuilder("0");
+        double cumulative = 0;
+        for (int i = 0; i < value.length() - 1; i++) {
+            if (i < advances.length) {
+                cumulative += advances[i];
+            }
+            xPositions.append(' ').append(SvgPathEncoder.format(cumulative));
+        }
+        element.append("<tspan x=\"").append(xPositions).append("\">");
+        element.append(escapeText(value));
+        element.append("</tspan>");
     }
 
     private static double effectiveFontSize(double fontSize, Matrix ctm) {
@@ -277,6 +391,12 @@ public final class SvgRenderer {
 
     private static String svgFontFamily(String fontName) {
         String name = fontName.startsWith("/") ? fontName.substring(1) : fontName;
+        if (name.contains("Raleway")) {
+            return "Raleway, sans-serif";
+        }
+        if (name.contains("Gotham")) {
+            return "Gotham, Arial, sans-serif";
+        }
         if (name.contains("Helvetica") || name.contains("Arial")) {
             return "Helvetica, Arial, sans-serif";
         }
@@ -289,6 +409,17 @@ public final class SvgRenderer {
         return name + ", sans-serif";
     }
 
+    private static String svgFontWeight(String fontName) {
+        String name = fontName.startsWith("/") ? fontName.substring(1) : fontName;
+        if (name.contains("SemiBold") || name.contains("DemiBold") || name.contains("Bold")) {
+            return "600";
+        }
+        if (name.contains("Medium")) {
+            return "500";
+        }
+        return "";
+    }
+
     /**
      * Renders an AGM tile like Illustrator: intrinsic pixel size plus an affine transform.
      * When {@code defs} is non-null and the image has a paint-time clip stack, clip paths are
@@ -299,10 +430,13 @@ public final class SvgRenderer {
             GraphicsCommand.EmbeddedImage image,
             boolean deviceYDown,
             double pageUry,
-            ElementIds elementIds) {
+            ElementIds elementIds,
+            SvgRenderOptions options) {
         if (image.getPngBytes().length == 0) {
             return "";
         }
+        StringBuilder element = new StringBuilder();
+        appendSourceTracePrologue(element, image, "image", options);
         int width = image.getWidth();
         int height = image.getHeight();
         if (width <= 0 || height <= 0) {
@@ -325,23 +459,29 @@ public final class SvgRenderer {
         }
         String transform = matrixTransform(displayMatrix);
         String base64 = Base64.getEncoder().encodeToString(image.getPngBytes());
-        StringBuilder element = new StringBuilder();
         List<GraphicsCommand.Clip> clips = image.getClipStack();
         if (defs != null && !clips.isEmpty()) {
             for (int i = 0; i < clips.size() - 1; i++) {
                 String clipId = elementIds.next();
-                appendClipPath(defs, clipId, clips.get(i), elementIds);
+                GraphicsCommand.Clip stackClip = clips.get(i);
+                appendClipPath(defs, clipId, stackClip, elementIds, options);
+                appendSourceTracePrologue(element, stackClip, "clip-apply", options);
                 element.append("<g id=\"").append(escapeAttr(elementIds.next())).append('"');
+                element.append(sourceTraceAttrs(stackClip, options));
                 element.append(" clip-path=\"url(#").append(clipId).append(")\">\n");
             }
             String imageClipId = elementIds.next();
-            appendClipPath(defs, imageClipId, imageLocalClip(clips.get(clips.size() - 1), displayMatrix), elementIds);
+            GraphicsCommand.Clip localClip =
+                    imageLocalClip(clips.get(clips.size() - 1), displayMatrix);
+            appendClipPath(defs, imageClipId, localClip, elementIds, options);
             element.append("<image");
             element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
+            element.append(sourceTraceAttrs(image, options));
             element.append(" clip-path=\"url(#").append(imageClipId).append(")\"");
         } else {
             element.append("<image");
             element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
+            element.append(sourceTraceAttrs(image, options));
         }
         if (!transform.isEmpty()) {
             element.append(" width=\"").append(width).append('"');
@@ -379,7 +519,11 @@ public final class SvgRenderer {
         }
         try {
             Matrix localClipCtm = displayMatrix.invert().postConcat(clip.getCtm());
-            return new GraphicsCommand.Clip(clip.getPath(), clip.getWindingRule(), localClipCtm);
+            return new GraphicsCommand.Clip(
+                    clip.getPath(),
+                    clip.getWindingRule(),
+                    localClipCtm,
+                    clip.getSourceSpan().orElse(null));
         } catch (IllegalArgumentException ex) {
             return clip;
         }
@@ -458,21 +602,27 @@ public final class SvgRenderer {
     }
 
     private static String rasterPlaceholderElement(
-            GraphicsCommand.RasterPlaceholder placeholder, String transform, ElementIds elementIds) {
+            GraphicsCommand.RasterPlaceholder placeholder,
+            String transform,
+            ElementIds elementIds,
+            SvgRenderOptions options) {
         BoundingBox region = placeholder.getRegion();
         double x = region.getLlx();
         double y = region.getLly();
         double w = region.getWidth();
         double h = region.getHeight();
         StringBuilder element = new StringBuilder();
+        appendSourceTracePrologue(element, placeholder, "raster-placeholder", options);
         if (!transform.isEmpty()) {
             element.append("<g");
             element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
             element.append(" transform=\"").append(escapeAttr(transform)).append('"');
+            element.append(sourceTraceAttrs(placeholder, options));
             element.append(">\n  ");
         }
         element.append("<rect");
         element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
+        element.append(sourceTraceAttrs(placeholder, options));
         element.append(" x=\"").append(SvgPathEncoder.format(x)).append('"');
         element.append(" y=\"").append(SvgPathEncoder.format(y)).append('"');
         element.append(" width=\"").append(SvgPathEncoder.format(w)).append('"');
@@ -664,20 +814,29 @@ public final class SvgRenderer {
     }
 
     private static String pathElement(
-            Path path, String transform, ElementIds elementIds, String paintAttributes) {
+            GraphicsCommand command,
+            String kind,
+            Path path,
+            String transform,
+            ElementIds elementIds,
+            String paintAttributes,
+            SvgRenderOptions options) {
         String d = SvgPathEncoder.toPathData(path);
         if (d.isEmpty()) {
             return "";
         }
         StringBuilder element = new StringBuilder();
+        appendSourceTracePrologue(element, command, kind, options);
         if (!transform.isEmpty()) {
             element.append("<g");
             element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
             element.append(" transform=\"").append(escapeAttr(transform)).append('"');
+            element.append(sourceTraceAttrs(command, options));
             element.append(">\n  ");
         }
         element.append("<path");
         element.append(" id=\"").append(escapeAttr(elementIds.next())).append('"');
+        element.append(sourceTraceAttrs(command, options));
         element.append(" d=\"").append(escapeAttr(d)).append('"');
         element.append(paintAttributes);
         element.append("/>");
@@ -792,6 +951,46 @@ public final class SvgRenderer {
                 (1 - m) * (1 - k),
                 (1 - y) * (1 - k)
         };
+    }
+
+    private static void appendSourceTracePrologue(
+            StringBuilder target,
+            GraphicsCommand command,
+            String kind,
+            SvgRenderOptions options) {
+        if (options == null || !options.emitSourceTrace()) {
+            return;
+        }
+        command.getSourceSpan().ifPresent(span -> target.append(span.svgSourceComment(kind)));
+    }
+
+    private static void appendSourceTracePrologue(
+            StringBuilder target, SourceSpan span, String kind, SvgRenderOptions options) {
+        if (options == null || !options.emitSourceTrace() || span == null) {
+            return;
+        }
+        target.append(span.svgSourceComment(kind));
+    }
+
+    private static String sourceTraceAttrs(GraphicsCommand command, SvgRenderOptions options) {
+        if (options == null || !options.emitSourceTrace()) {
+            return "";
+        }
+        return sourceTraceAttrs(command.getSourceSpan(), options);
+    }
+
+    private static String sourceTraceAttrs(SourceSpan span, SvgRenderOptions options) {
+        if (options == null || !options.emitSourceTrace() || span == null) {
+            return "";
+        }
+        return span.svgDataAttributes();
+    }
+
+    private static String sourceTraceAttrs(Optional<SourceSpan> span, SvgRenderOptions options) {
+        if (options == null || !options.emitSourceTrace()) {
+            return "";
+        }
+        return span.map(SourceSpan::svgDataAttributes).orElse("");
     }
 
     private static String sanitizeLayerId(String layerId) {

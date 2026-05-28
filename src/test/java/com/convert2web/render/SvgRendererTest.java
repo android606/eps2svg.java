@@ -6,6 +6,7 @@ import com.convert2web.model.EpsDocumentBuilder;
 import com.convert2web.model.GraphicsCommand;
 import com.convert2web.model.Matrix;
 import com.convert2web.model.PaintStyle;
+import com.convert2web.model.SourceSpan;
 import com.convert2web.model.Path;
 import com.convert2web.model.PathSegment;
 import com.convert2web.model.StrokeStyle;
@@ -373,9 +374,72 @@ class SvgRendererTest {
         String svg = new SvgRenderer().render(document);
         assertTrue(svg.contains("<text"));
         assertTrue(svg.contains("Hello"));
-        assertTrue(svg.contains("x=\"10\""));
-        assertTrue(svg.contains("y=\"20\""));
+        assertTrue(svg.contains("transform=\"translate(10 20)\""));
+        assertTrue(svg.contains("x=\"0\" y=\"0\""));
         assertTrue(svg.contains("font-size=\"12\""));
+    }
+
+    @Test
+    void rendersRalewaySemiBoldWithWeightAndFamily() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 100, 100))
+                .addText(
+                        "Low",
+                        17.5552,
+                        109.323,
+                        "SLWDMH+Raleway-SemiBold",
+                        5.24472,
+                        PaintStyle.gray(0),
+                        Matrix.identity(),
+                        new double[] {2.95264, 3.05762, 0})
+                .build();
+        String svg = new SvgRenderer().render(document);
+        assertTrue(svg.contains("font-family=\"Raleway, sans-serif\""), svg);
+        assertTrue(svg.contains("font-weight=\"600\""), svg);
+        assertTrue(svg.contains("font-size=\"5.2447"), svg);
+        assertTrue(svg.contains("transform=\"translate(17.5552 109.323)\""), svg);
+        assertTrue(svg.contains("x=\"0\" y=\"0\""), svg);
+        assertFalse(svg.contains("matrix(5.2447"), svg);
+        assertTrue(svg.contains("<tspan x=\"0 2.9526 6.0103\""), svg);
+    }
+
+    @Test
+    void rendersGothamItalicLabelWithDarkFill() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 100, 200))
+                .addText(
+                        "(Blue)",
+                        9.0044,
+                        162.192,
+                        "GothamXNarrow-BookItalic",
+                        8.0,
+                        PaintStyle.rgb(35 / 255.0, 31 / 255.0, 32 / 255.0),
+                        Matrix.identity(),
+                        new double[] {2.73584, 4.19141, 1.77588, 3.77539, 3.49609, 0})
+                .build();
+        String svg = new SvgRenderer().render(document);
+        assertTrue(svg.contains("font-style=\"italic\""), svg);
+        assertTrue(svg.contains("fill=\"rgb(35,31,32)\""), svg);
+        assertTrue(svg.contains(">(Blue)</tspan>"), svg);
+    }
+
+    @Test
+    void rendersTextWithGlyphAdvanceTspan() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 100, 100))
+                .addText(
+                        "AB",
+                        10,
+                        20,
+                        "Helvetica",
+                        12,
+                        PaintStyle.rgb(0, 0, 0),
+                        Matrix.identity(),
+                        new double[] {3, 4, 0})
+                .build();
+        String svg = new SvgRenderer().render(document);
+        assertTrue(svg.contains("<tspan x=\"0 3\""), svg);
+        assertTrue(svg.contains(">AB</tspan>"));
     }
 
     @Test
@@ -521,6 +585,68 @@ class SvgRendererTest {
         assertEquals(100.0, options.minWidth().get().toPixels(0), 1e-6);
         assertEquals(8.5 * 96, options.maxWidth().get().toPixels(0), 1e-6);
         assertEquals(11 * 96, options.maxHeight().get().toPixels(0), 1e-6);
+    }
+
+    @Test
+    void emitsSourceTraceAttributesWhenEnabled() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 10, 10))
+                .addFill(
+                        new Path(List.of(
+                                new PathSegment.MoveTo(0, 0),
+                                new PathSegment.LineTo(10, 0),
+                                new PathSegment.LineTo(10, 10),
+                                new PathSegment.Close())),
+                        PaintStyle.rgb(1, 0, 0),
+                        WindingRule.NON_ZERO,
+                        Matrix.identity(),
+                        SourceSpan.of(99, 4, 5432))
+                .build();
+
+        String without = new SvgRenderer().render(document);
+        assertFalse(without.contains("data-eps-line"));
+
+        String with = new SvgRenderer(SvgRenderOptions.builder().emitSourceTrace(true).build())
+                .render(document);
+        assertTrue(with.contains("data-eps-line=\"99\""), with);
+        assertTrue(with.contains("data-eps-column=\"4\""), with);
+        assertTrue(with.contains("data-eps-offset=\"5432\""), with);
+        assertTrue(with.contains("<!-- eps-source kind=\"fill\""), with);
+    }
+
+    @Test
+    void emitsSourceTraceForClipAndPopClip() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 10, 10))
+                .addClip(
+                        new Path(List.of(
+                                new PathSegment.MoveTo(0, 0),
+                                new PathSegment.LineTo(10, 0),
+                                new PathSegment.LineTo(10, 10),
+                                new PathSegment.Close())),
+                        WindingRule.NON_ZERO,
+                        Matrix.identity(),
+                        SourceSpan.of(10, 2, 100))
+                .addFill(
+                        new Path(List.of(
+                                new PathSegment.MoveTo(1, 1),
+                                new PathSegment.LineTo(2, 1),
+                                new PathSegment.LineTo(2, 2),
+                                new PathSegment.Close())),
+                        PaintStyle.rgb(0, 1, 0),
+                        WindingRule.NON_ZERO,
+                        Matrix.identity(),
+                        SourceSpan.of(12, 1, 300))
+                .addPopClip(SourceSpan.of(11, 1, 200))
+                .build();
+
+        String svg = new SvgRenderer(SvgRenderOptions.builder().emitSourceTrace(true).build())
+                .render(document);
+
+        assertTrue(svg.contains("<!-- eps-source kind=\"clip\""), svg);
+        assertTrue(svg.contains("data-eps-line=\"10\""), svg);
+        assertTrue(svg.contains("<!-- eps-source kind=\"clip-apply\""), svg);
+        assertTrue(svg.contains("<!-- eps-source kind=\"pop-clip\" line=\"11\" column=\"1\" offset=\"200\""), svg);
     }
 
     private static String renderSampleFill() {

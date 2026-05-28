@@ -83,4 +83,18 @@ class EpsDocumentTest {
         assertEquals(new BoundingBox(0, 0, 100, 100), document.getBoundingBox());
         assertNull(document.getHiResBoundingBox());
     }
+
+    @Test
+    void addTextOnTopPreservesPaintOrder() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 100, 200))
+                .addTextOnTop("(Blue)", 9.0, 162.0, "GothamXNarrow-BookItalic", 8.0,
+                        PaintStyle.rgb(0.1, 0.1, 0.1), Matrix.identity(), null)
+                .addEmbeddedImage(82, 29, new Matrix(0.24, 0, 0, 0.24, 0, 0), new byte[] {1, 2, 3})
+                .build();
+
+        assertEquals(2, document.getCommands().size());
+        assertInstanceOf(GraphicsCommand.Text.class, document.getCommands().get(0));
+        assertInstanceOf(GraphicsCommand.EmbeddedImage.class, document.getCommands().get(1));
+    }
 }

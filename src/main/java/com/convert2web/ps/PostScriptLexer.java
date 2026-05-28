@@ -12,6 +12,7 @@ public final class PostScriptLexer implements AutoCloseable {
     private final Reader reader;
     private int line = 1;
     private int column = 1;
+    private int offset;
     private int current = -2;
     private boolean closed;
     private PostScriptToken pushedBack;
@@ -51,11 +52,12 @@ public final class PostScriptLexer implements AutoCloseable {
 
         int ch = peek();
         if (ch == -1) {
-            return new PostScriptToken(PostScriptTokenType.EOF, "", line, column);
+            return new PostScriptToken(PostScriptTokenType.EOF, "", line, column, offset);
         }
 
         int startLine = line;
         int startColumn = column;
+        int startOffset = offset;
 
         if (ch == '%') {
             PostScriptToken binary = tryReadBeginBinaryComment();
@@ -68,41 +70,41 @@ public final class PostScriptLexer implements AutoCloseable {
 
         if (ch == '[') {
             read();
-            return new PostScriptToken(PostScriptTokenType.ARRAY_START, "[", startLine, startColumn);
+            return new PostScriptToken(PostScriptTokenType.ARRAY_START, "[", startLine, startColumn, startOffset);
         }
         if (ch == ']') {
             read();
-            return new PostScriptToken(PostScriptTokenType.ARRAY_END, "]", startLine, startColumn);
+            return new PostScriptToken(PostScriptTokenType.ARRAY_END, "]", startLine, startColumn, startOffset);
         }
         if (ch == '{') {
             read();
-            return new PostScriptToken(PostScriptTokenType.PROCEDURE_START, "{", startLine, startColumn);
+            return new PostScriptToken(PostScriptTokenType.PROCEDURE_START, "{", startLine, startColumn, startOffset);
         }
         if (ch == '}') {
             read();
-            return new PostScriptToken(PostScriptTokenType.PROCEDURE_END, "}", startLine, startColumn);
+            return new PostScriptToken(PostScriptTokenType.PROCEDURE_END, "}", startLine, startColumn, startOffset);
         }
         if (ch == '<') {
             read();
             if (peek() == '<') {
                 read();
-                return new PostScriptToken(PostScriptTokenType.DICTIONARY_START, "<<", startLine, startColumn);
+                return new PostScriptToken(PostScriptTokenType.DICTIONARY_START, "<<", startLine, startColumn, startOffset);
             }
             if (peek() == '~') {
-                return readAscii85String(startLine, startColumn);
+                return readAscii85String(startLine, startColumn, startOffset);
             }
-            return readHexString(startLine, startColumn);
+            return readHexString(startLine, startColumn, startOffset);
         }
         if (ch == '>') {
             read();
             if (peek() == '>') {
                 read();
-                return new PostScriptToken(PostScriptTokenType.DICTIONARY_END, ">>", startLine, startColumn);
+                return new PostScriptToken(PostScriptTokenType.DICTIONARY_END, ">>", startLine, startColumn, startOffset);
             }
             throw syntaxError("Unexpected '>'");
         }
         if (ch == '(') {
-            return readLiteralString(startLine, startColumn);
+            return readLiteralString(startLine, startColumn, startOffset);
         }
         if (ch == '/') {
             read();
@@ -116,27 +118,27 @@ public final class PostScriptLexer implements AutoCloseable {
                 }
                 return nextToken();
             }
-            return new PostScriptToken(PostScriptTokenType.LITERAL_NAME, readName(), startLine, startColumn);
+            return new PostScriptToken(PostScriptTokenType.LITERAL_NAME, readName(), startLine, startColumn, startOffset);
         }
         if (isNumberStart(ch)) {
-            return readNumber(startLine, startColumn);
+            return readNumber(startLine, startColumn, startOffset);
         }
         if (isNameStart(ch)) {
-            return readNameToken(startLine, startColumn);
+            return readNameToken(startLine, startColumn, startOffset);
         }
 
         throw syntaxError("Unexpected character: " + (char) ch);
     }
 
-    private PostScriptToken readNameToken(int startLine, int startColumn) throws IOException {
+    private PostScriptToken readNameToken(int startLine, int startColumn, int startOffset) throws IOException {
         String name = readName();
         if ("true".equals(name) || "false".equals(name)) {
-            return new PostScriptToken(PostScriptTokenType.BOOLEAN, name, startLine, startColumn);
+            return new PostScriptToken(PostScriptTokenType.BOOLEAN, name, startLine, startColumn, startOffset);
         }
-        return new PostScriptToken(PostScriptTokenType.NAME, name, startLine, startColumn);
+        return new PostScriptToken(PostScriptTokenType.NAME, name, startLine, startColumn, startOffset);
     }
 
-    private PostScriptToken readNumber(int startLine, int startColumn) throws IOException {
+    private PostScriptToken readNumber(int startLine, int startColumn, int startOffset) throws IOException {
         StringBuilder sb = new StringBuilder();
         if (peek() == '+' || peek() == '-') {
             sb.append((char) read());
@@ -166,10 +168,10 @@ public final class PostScriptLexer implements AutoCloseable {
             }
         }
         PostScriptTokenType type = isReal ? PostScriptTokenType.REAL : PostScriptTokenType.INTEGER;
-        return new PostScriptToken(type, sb.toString(), startLine, startColumn);
+        return new PostScriptToken(type, sb.toString(), startLine, startColumn, startOffset);
     }
 
-    private PostScriptToken readLiteralString(int startLine, int startColumn) throws IOException {
+    private PostScriptToken readLiteralString(int startLine, int startColumn, int startOffset) throws IOException {
         read(); // '('
         StringBuilder sb = new StringBuilder();
         int depth = 1;
@@ -235,10 +237,10 @@ public final class PostScriptLexer implements AutoCloseable {
                 sb.append((char) ch);
             }
         }
-        return new PostScriptToken(PostScriptTokenType.STRING, sb.toString(), startLine, startColumn);
+        return new PostScriptToken(PostScriptTokenType.STRING, sb.toString(), startLine, startColumn, startOffset);
     }
 
-    private PostScriptToken readHexString(int startLine, int startColumn) throws IOException {
+    private PostScriptToken readHexString(int startLine, int startColumn, int startOffset) throws IOException {
         StringBuilder sb = new StringBuilder();
         while (true) {
             int ch = peek();
@@ -257,10 +259,10 @@ public final class PostScriptLexer implements AutoCloseable {
             throw syntaxError("Unterminated hex string");
         }
         read();
-        return new PostScriptToken(PostScriptTokenType.HEX_STRING, sb.toString(), startLine, startColumn);
+        return new PostScriptToken(PostScriptTokenType.HEX_STRING, sb.toString(), startLine, startColumn, startOffset);
     }
 
-    private PostScriptToken readAscii85String(int startLine, int startColumn) throws IOException {
+    private PostScriptToken readAscii85String(int startLine, int startColumn, int startOffset) throws IOException {
         read(); // ~
         StringBuilder sb = new StringBuilder();
         while (true) {
@@ -279,7 +281,7 @@ public final class PostScriptLexer implements AutoCloseable {
             }
             sb.append((char) read());
         }
-        return new PostScriptToken(PostScriptTokenType.STRING, sb.toString(), startLine, startColumn);
+        return new PostScriptToken(PostScriptTokenType.STRING, sb.toString(), startLine, startColumn, startOffset);
     }
 
     private String readName() throws IOException {
@@ -308,16 +310,19 @@ public final class PostScriptLexer implements AutoCloseable {
         reader.mark(8192);
         int savedLine = line;
         int savedColumn = column;
+        int savedOffset = offset;
         String header = readPercentLine();
         reader.reset();
         line = savedLine;
         column = savedColumn;
+        offset = savedOffset;
         current = -2;
         if (!header.trim().startsWith("%%BeginBinary")) {
             return null;
         }
         int startLine = line;
         int startColumn = column;
+        int startOffset = offset;
         readPercentLine();
         String operator = readLineTrimmed();
         if (operator.isEmpty()) {
@@ -339,7 +344,8 @@ public final class PostScriptLexer implements AutoCloseable {
                 operator,
                 payload.toString(),
                 startLine,
-                startColumn);
+                startColumn,
+                startOffset);
     }
 
     private String readPercentLine() throws IOException {
@@ -447,6 +453,7 @@ public final class PostScriptLexer implements AutoCloseable {
             return -1;
         }
         current = -2;
+        offset++;
         if (ch == '\n') {
             line++;
             column = 1;

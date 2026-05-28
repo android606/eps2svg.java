@@ -255,10 +255,12 @@ final class AdobeIllustratorPageRunner {
         if (text == null) {
             return null;
         }
-        String body = stripLevelWrapperBlocks(text);
+        String body = normalizeLineEndings(text);
+        body = stripLevelWrapperBlocks(body);
         body = stripIllustratorColorServerDicts(body);
         body = body.replaceAll("(?m)^false sop\\s*\\r?\\n?", "");
         body = body.replaceAll("(?m)^true sop\\s*\\r?\\n?", "");
+        body = stripSepcsGlyphTextPasses(body);
         body = body.replaceAll("(?m)^\\d+ /0 /CSD get_res sepcs\\s*\\r?\\n?", "");
         body = stripMarkedBlocks(body, "/BCKTCI");
         body = stripShadingBlocks(body);
@@ -298,6 +300,46 @@ final class AdobeIllustratorPageRunner {
                 "(?m)^1\\s+-1\\s+scale\\s+0\\s+-?[\\d.]+(?:[eE][+-]?\\d+)?\\s+translate\\s*\\r?\\n?",
                 "");
         return body;
+    }
+
+    /**
+     * Drops {@code 1 dict begin ... end} blocks that only paint sepcs glyph fragments
+     * (e.g. {@code (Bl)} + {@code ue)} after a tile). Full labels are painted earlier.
+     */
+    static String normalizeLineEndings(String text) {
+        return text.replace("\r\n", "\n").replace('\r', '\n');
+    }
+
+    static String stripSepcsGlyphTextPasses(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        String[] lines = text.split("\n", -1);
+        StringBuilder out = new StringBuilder();
+        int i = 0;
+        while (i < lines.length) {
+            if ("1 dict begin".equals(lines[i].trim())) {
+                int endLine = i + 1;
+                while (endLine < lines.length && !"end".equals(lines[endLine].trim())) {
+                    endLine++;
+                }
+                if (endLine < lines.length) {
+                    String block = String.join("\n", java.util.Arrays.copyOfRange(lines, i, endLine));
+                    if (block.contains("msf")
+                            && (block.contains("xsh") || block.contains(")sh"))
+                            && !block.contains("<<")) {
+                        i = endLine + 1;
+                        continue;
+                    }
+                }
+            }
+            out.append(lines[i]);
+            if (i < lines.length - 1) {
+                out.append('\n');
+            }
+            i++;
+        }
+        return out.toString();
     }
 
     /**
@@ -385,10 +427,26 @@ final class AdobeIllustratorPageRunner {
                 break;
             }
             out.append(text, i, start);
-            int end = findNextPaintLineIndex(text, start);
+            int end = findAdobeSubsetFontEnd(text, start);
             i = end < 0 ? text.length() : end;
         }
         return out.toString();
+    }
+
+    /**
+     * Stops font stripping at {@code %ADOEndSubsetFont} so {@code nf}/{@code msf} setup lines
+     * after the binary font payload are kept for the VM.
+     */
+    static int findAdobeSubsetFontEnd(String text, int subsetFontStart) {
+        int endMarker = text.indexOf("%ADOEndSubsetFont", subsetFontStart);
+        if (endMarker < 0) {
+            return findNextPaintLineIndex(text, subsetFontStart);
+        }
+        int lineEnd = nextLineBreak(text, endMarker);
+        if (lineEnd < 0) {
+            return text.length();
+        }
+        return skipLineBreak(text, lineEnd);
     }
 
     private static int findNextPaintLineIndex(String text, int from) {

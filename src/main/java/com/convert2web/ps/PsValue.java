@@ -1,21 +1,43 @@
 package com.convert2web.ps;
 
+import com.convert2web.model.SourceSpan;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Parsed PostScript object produced by {@link PostScriptParser}.
  */
 public abstract class PsValue {
+    private final SourceSpan sourceSpan;
+
+    protected PsValue() {
+        this(null);
+    }
+
+    protected PsValue(SourceSpan sourceSpan) {
+        this.sourceSpan = sourceSpan;
+    }
+
+    public Optional<SourceSpan> sourceSpan() {
+        return Optional.ofNullable(sourceSpan);
+    }
+
     public abstract PsValueKind getKind();
 
     public static final class IntegerValue extends PsValue {
         private final long value;
 
         public IntegerValue(long value) {
+            this(value, null);
+        }
+
+        public IntegerValue(long value, SourceSpan sourceSpan) {
+            super(sourceSpan);
             this.value = value;
         }
 
@@ -43,6 +65,11 @@ public abstract class PsValue {
         private final double value;
 
         public RealValue(double value) {
+            this(value, null);
+        }
+
+        public RealValue(double value, SourceSpan sourceSpan) {
+            super(sourceSpan);
             this.value = value;
         }
 
@@ -70,6 +97,11 @@ public abstract class PsValue {
         private final boolean value;
 
         public BooleanValue(boolean value) {
+            this(value, null);
+        }
+
+        public BooleanValue(boolean value, SourceSpan sourceSpan) {
+            super(sourceSpan);
             this.value = value;
         }
 
@@ -98,16 +130,29 @@ public abstract class PsValue {
         private final boolean literal;
 
         public NameValue(String name, boolean literal) {
+            this(name, literal, null);
+        }
+
+        public NameValue(String name, boolean literal, SourceSpan sourceSpan) {
+            super(sourceSpan);
             this.name = Objects.requireNonNull(name, "name");
             this.literal = literal;
         }
 
         public static NameValue literal(String name) {
-            return new NameValue(name, true);
+            return new NameValue(name, true, null);
         }
 
         public static NameValue executable(String name) {
-            return new NameValue(name, false);
+            return new NameValue(name, false, null);
+        }
+
+        public static NameValue literal(String name, SourceSpan sourceSpan) {
+            return new NameValue(name, true, sourceSpan);
+        }
+
+        public static NameValue executable(String name, SourceSpan sourceSpan) {
+            return new NameValue(name, false, sourceSpan);
         }
 
         public String getName() {
@@ -142,6 +187,11 @@ public abstract class PsValue {
         private final String value;
 
         public StringValue(String value) {
+            this(value, null);
+        }
+
+        public StringValue(String value, SourceSpan sourceSpan) {
+            super(sourceSpan);
             this.value = value;
         }
 
@@ -169,6 +219,11 @@ public abstract class PsValue {
         private final String hexDigits;
 
         public HexStringValue(String hexDigits) {
+            this(hexDigits, null);
+        }
+
+        public HexStringValue(String hexDigits, SourceSpan sourceSpan) {
+            super(sourceSpan);
             this.hexDigits = hexDigits;
         }
 
@@ -196,6 +251,11 @@ public abstract class PsValue {
         private final List<PsValue> elements;
 
         public ArrayValue(List<PsValue> elements) {
+            this(elements, null);
+        }
+
+        public ArrayValue(List<PsValue> elements, SourceSpan sourceSpan) {
+            super(sourceSpan);
             this.elements = new java.util.ArrayList<>(elements);
         }
 
@@ -231,6 +291,11 @@ public abstract class PsValue {
         private final List<PsValue> body;
 
         public ProcedureValue(List<PsValue> body) {
+            this(body, null);
+        }
+
+        public ProcedureValue(List<PsValue> body, SourceSpan sourceSpan) {
+            super(sourceSpan);
             this.body = List.copyOf(body);
         }
 
@@ -263,6 +328,11 @@ public abstract class PsValue {
         private final String payload;
 
         public AgmBinaryInvokeValue(String operator, String payload) {
+            this(operator, payload, null);
+        }
+
+        public AgmBinaryInvokeValue(String operator, String payload, SourceSpan sourceSpan) {
+            super(sourceSpan);
             this.operator = Objects.requireNonNull(operator, "operator");
             this.payload = payload == null ? "" : payload;
         }
@@ -285,6 +355,11 @@ public abstract class PsValue {
         private final Map<String, PsValue> entries;
 
         public DictionaryValue(Map<String, PsValue> entries) {
+            this(entries, null);
+        }
+
+        public DictionaryValue(Map<String, PsValue> entries, SourceSpan sourceSpan) {
+            super(sourceSpan);
             this.entries = Collections.unmodifiableMap(new LinkedHashMap<>(entries));
         }
 

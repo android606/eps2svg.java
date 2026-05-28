@@ -8,9 +8,10 @@ public final class PostScriptToken {
     private final String binaryPayload;
     private final int line;
     private final int column;
+    private final int offset;
 
-    public PostScriptToken(PostScriptTokenType type, String text, int line, int column) {
-        this(type, text, null, line, column);
+    public PostScriptToken(PostScriptTokenType type, String text, int line, int column, int offset) {
+        this(type, text, null, line, column, offset);
     }
 
     public PostScriptToken(
@@ -18,12 +19,14 @@ public final class PostScriptToken {
             String agmOperator,
             String binaryPayload,
             int line,
-            int column) {
+            int column,
+            int offset) {
         this.type = type;
         this.text = agmOperator;
         this.binaryPayload = binaryPayload;
         this.line = line;
         this.column = column;
+        this.offset = offset;
     }
 
     /** Payload between {@code %%BeginBinary} operator line and {@code %%EndBinary}. */
@@ -45,6 +48,11 @@ public final class PostScriptToken {
 
     public int getColumn() {
         return column;
+    }
+
+    /** 0-based character index from the start of the PostScript stream. */
+    public int getOffset() {
+        return offset;
     }
 
     @Override

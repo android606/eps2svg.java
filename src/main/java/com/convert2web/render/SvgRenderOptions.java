@@ -13,16 +13,23 @@ public final class SvgRenderOptions {
     private final Length minHeight;
     private final Length maxWidth;
     private final Length maxHeight;
+    private final boolean emitSourceTrace;
 
-    private SvgRenderOptions(Length minWidth, Length minHeight, Length maxWidth, Length maxHeight) {
+    private SvgRenderOptions(
+            Length minWidth,
+            Length minHeight,
+            Length maxWidth,
+            Length maxHeight,
+            boolean emitSourceTrace) {
         this.minWidth = minWidth;
         this.minHeight = minHeight;
         this.maxWidth = maxWidth;
         this.maxHeight = maxHeight;
+        this.emitSourceTrace = emitSourceTrace;
     }
 
     public static SvgRenderOptions none() {
-        return new SvgRenderOptions(null, null, null, null);
+        return new SvgRenderOptions(null, null, null, null, false);
     }
 
     /** Defaults for CLI tests and shell scripts: min 100px, max US letter size. */
@@ -59,11 +66,17 @@ public final class SvgRenderOptions {
         return minWidth != null || minHeight != null || maxWidth != null || maxHeight != null;
     }
 
+    /** When true, SVG elements include {@code data-eps-line}, {@code data-eps-column}, {@code data-eps-offset}. */
+    public boolean emitSourceTrace() {
+        return emitSourceTrace;
+    }
+
     public static final class Builder {
         private Length minWidth;
         private Length minHeight;
         private Length maxWidth;
         private Length maxHeight;
+        private boolean emitSourceTrace;
 
         public Builder minWidth(String length) {
             this.minWidth = length == null ? null : Length.parse(length);
@@ -85,8 +98,13 @@ public final class SvgRenderOptions {
             return this;
         }
 
+        public Builder emitSourceTrace(boolean emitSourceTrace) {
+            this.emitSourceTrace = emitSourceTrace;
+            return this;
+        }
+
         public SvgRenderOptions build() {
-            return new SvgRenderOptions(minWidth, minHeight, maxWidth, maxHeight);
+            return new SvgRenderOptions(minWidth, minHeight, maxWidth, maxHeight, emitSourceTrace);
         }
     }
 }

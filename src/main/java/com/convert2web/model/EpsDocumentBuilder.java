@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * Builds an {@link EpsDocument} as the interpreter records drawing operations.
@@ -36,33 +37,64 @@ public final class EpsDocumentBuilder {
     }
 
     public EpsDocumentBuilder addFill(Path path, PaintStyle fill, WindingRule windingRule, Matrix ctm) {
-        commands.add(new GraphicsCommand.Fill(path, fill, windingRule, ctm));
+        return addFill(path, fill, windingRule, ctm, null);
+    }
+
+    public EpsDocumentBuilder addFill(
+            Path path, PaintStyle fill, WindingRule windingRule, Matrix ctm, SourceSpan sourceSpan) {
+        commands.add(new GraphicsCommand.Fill(path, fill, windingRule, ctm, sourceSpan));
         return this;
     }
 
     /** Inserts a fill so it paints behind subsequently recorded artwork. */
     public EpsDocumentBuilder addFillAtFront(Path path, PaintStyle fill, WindingRule windingRule, Matrix ctm) {
-        commands.add(0, new GraphicsCommand.Fill(path, fill, windingRule, ctm));
+        return addFillAtFront(path, fill, windingRule, ctm, null);
+    }
+
+    public EpsDocumentBuilder addFillAtFront(
+            Path path, PaintStyle fill, WindingRule windingRule, Matrix ctm, SourceSpan sourceSpan) {
+        commands.add(0, new GraphicsCommand.Fill(path, fill, windingRule, ctm, sourceSpan));
         return this;
     }
 
     public EpsDocumentBuilder addStroke(Path path, PaintStyle strokeColor, StrokeStyle strokeStyle, Matrix ctm) {
-        commands.add(new GraphicsCommand.Stroke(path, strokeColor, strokeStyle, ctm));
+        return addStroke(path, strokeColor, strokeStyle, ctm, null);
+    }
+
+    public EpsDocumentBuilder addStroke(
+            Path path,
+            PaintStyle strokeColor,
+            StrokeStyle strokeStyle,
+            Matrix ctm,
+            SourceSpan sourceSpan) {
+        commands.add(new GraphicsCommand.Stroke(path, strokeColor, strokeStyle, ctm, sourceSpan));
         return this;
     }
 
     public EpsDocumentBuilder addClip(Path path, WindingRule windingRule, Matrix ctm) {
-        commands.add(new GraphicsCommand.Clip(path, windingRule, ctm));
+        return addClip(path, windingRule, ctm, null);
+    }
+
+    public EpsDocumentBuilder addClip(Path path, WindingRule windingRule, Matrix ctm, SourceSpan sourceSpan) {
+        commands.add(new GraphicsCommand.Clip(path, windingRule, ctm, sourceSpan));
         return this;
     }
 
     public EpsDocumentBuilder addPopClip() {
-        commands.add(new GraphicsCommand.PopClip());
+        return addPopClip(null);
+    }
+
+    public EpsDocumentBuilder addPopClip(SourceSpan sourceSpan) {
+        commands.add(new GraphicsCommand.PopClip(sourceSpan));
         return this;
     }
 
     public EpsDocumentBuilder addRasterPlaceholder(BoundingBox region, Matrix ctm) {
-        commands.add(new GraphicsCommand.RasterPlaceholder(region, ctm));
+        return addRasterPlaceholder(region, ctm, null);
+    }
+
+    public EpsDocumentBuilder addRasterPlaceholder(BoundingBox region, Matrix ctm, SourceSpan sourceSpan) {
+        commands.add(new GraphicsCommand.RasterPlaceholder(region, ctm, sourceSpan));
         return this;
     }
 
@@ -76,7 +108,39 @@ public final class EpsDocumentBuilder {
             Matrix ctm,
             byte[] pngBytes,
             List<Clip> clipStack) {
-        commands.add(new GraphicsCommand.EmbeddedImage(width, height, ctm, pngBytes, clipStack));
+        return addEmbeddedImage(width, height, ctm, pngBytes, clipStack, null);
+    }
+
+    public EpsDocumentBuilder addEmbeddedImage(
+            int width,
+            int height,
+            Matrix ctm,
+            byte[] pngBytes,
+            List<Clip> clipStack,
+            SourceSpan sourceSpan) {
+        commands.add(new GraphicsCommand.EmbeddedImage(width, height, ctm, pngBytes, clipStack, sourceSpan));
+        return this;
+    }
+
+    public EpsDocumentBuilder moveRecentTextAfterLastCommand(
+            Predicate<GraphicsCommand.Text> predicate,
+            int maxLookback) {
+        if (commands.isEmpty() || predicate == null || maxLookback <= 0) {
+            return this;
+        }
+        int last = commands.size() - 1;
+        int first = Math.max(0, last - maxLookback);
+        List<GraphicsCommand> moved = new ArrayList<>();
+        for (int i = last - 1; i >= first; i--) {
+            GraphicsCommand command = commands.get(i);
+            if (command instanceof GraphicsCommand.Text
+                    && predicate.test((GraphicsCommand.Text) command)) {
+                moved.add(0, command);
+                commands.remove(i);
+                last--;
+            }
+        }
+        commands.addAll(last + 1, moved);
         return this;
     }
 
@@ -88,7 +152,75 @@ public final class EpsDocumentBuilder {
             double fontSize,
             PaintStyle fill,
             Matrix ctm) {
-        commands.add(new GraphicsCommand.Text(text, x, y, fontName, fontSize, fill, ctm));
+        return addText(text, x, y, fontName, fontSize, fill, ctm, null);
+    }
+
+    public EpsDocumentBuilder addText(
+            String text,
+            double x,
+            double y,
+            String fontName,
+            double fontSize,
+            PaintStyle fill,
+            Matrix ctm,
+            double[] glyphAdvances) {
+        return addText(text, x, y, fontName, fontSize, fill, ctm, glyphAdvances, null);
+    }
+
+    public EpsDocumentBuilder addText(
+            String text,
+            double x,
+            double y,
+            String fontName,
+            double fontSize,
+            PaintStyle fill,
+            Matrix ctm,
+            double[] glyphAdvances,
+            SourceSpan sourceSpan) {
+        return addText(text, x, y, fontName, fontSize, fill, ctm, glyphAdvances, List.of(), sourceSpan);
+    }
+
+    public EpsDocumentBuilder addText(
+            String text,
+            double x,
+            double y,
+            String fontName,
+            double fontSize,
+            PaintStyle fill,
+            Matrix ctm,
+            double[] glyphAdvances,
+            List<Clip> clipStack,
+            SourceSpan sourceSpan) {
+        commands.add(new GraphicsCommand.Text(
+                text, x, y, fontName, fontSize, fill, ctm, glyphAdvances, clipStack, sourceSpan));
+        return this;
+    }
+
+    /** Records text in paint order; renderer preserves later clips/images/fills. */
+    public EpsDocumentBuilder addTextOnTop(
+            String text,
+            double x,
+            double y,
+            String fontName,
+            double fontSize,
+            PaintStyle fill,
+            Matrix ctm,
+            double[] glyphAdvances) {
+        return addTextOnTop(text, x, y, fontName, fontSize, fill, ctm, glyphAdvances, null);
+    }
+
+    public EpsDocumentBuilder addTextOnTop(
+            String text,
+            double x,
+            double y,
+            String fontName,
+            double fontSize,
+            PaintStyle fill,
+            Matrix ctm,
+            double[] glyphAdvances,
+            SourceSpan sourceSpan) {
+        commands.add(new GraphicsCommand.Text(
+                text, x, y, fontName, fontSize, fill, ctm, glyphAdvances, sourceSpan));
         return this;
     }
 
