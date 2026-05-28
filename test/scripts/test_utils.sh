@@ -132,7 +132,7 @@ print_test_summary() {
 }
 
 # Default display size for jar conversions in test scripts (viewBox unchanged).
-EPS2SVG_DISPLAY_OPTS="--min-width 100 --min-height 100 --max-width 8.5in --max-height 11in"
+EPS2SVG_DISPLAY_OPTS="--min-width=100 --min-height=100 --max-width=8.5in --max-height=11in"
 
 run_eps2svg() {
     local input_file="$1"

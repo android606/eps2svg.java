@@ -8,6 +8,9 @@ target/
 test/output/
 test/output/test_paths/
 
+# Large local-only fixture corpus used by optional regression tests
+test/test_images/real_live_images/
+
 # macOS
 .DS_Store
 **/.DS_Store
@@ -24,6 +27,7 @@ __pycache__/
 .aider*
 
 # IDE (optional local settings)
+.cursor/
 .idea/
 *.iml
 .vscode/

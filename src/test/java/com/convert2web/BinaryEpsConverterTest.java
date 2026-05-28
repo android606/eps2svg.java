@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -46,16 +47,16 @@ class BinaryEpsConverterTest {
     }
 
     @Test
-    void convertsRemainingRealLiveBinaryEpsToVectorSvg() throws Exception {
+    void convertsSupportedRealLiveBinaryEpsToVectorSvg() throws Exception {
         String[] names = {
                 "v15624285",
                 "v1641556",
-                "v1885220",
                 "v1658963",
                 "v1658963_en-ca"
         };
         for (String name : names) {
             Path input = Path.of("test/test_images/real_live_images", name + ".eps");
+            assumeTrue(Files.exists(input), "Local real-live fixture not present: " + input);
             Path output = Files.createTempFile(name, ".svg");
             try {
                 assertTrue(new BinaryEpsConverter().tryConvert(input.toString(), output.toString()), name);

@@ -44,10 +44,11 @@ public final class SvgRenderer {
     }
 
     private static final class ElementIds {
+        private static final String ID_PREFIX = "e";
         private int next = 1;
 
         private String next() {
-            return Integer.toString(next++);
+            return ID_PREFIX + (next++);
         }
     }
 
@@ -186,7 +187,7 @@ public final class SvgRenderer {
             svg.append("<defs>\n").append(defs).append("</defs>\n");
         }
         appendFontReportComment(svg, fontReport);
-        svg.append("<style>image{image-rendering:pixelated;}</style>\n");
+        svg.append("<style type=\"text/css\">image{image-rendering:pixelated;}</style>\n");
         if (pageTransform.isEmpty()) {
             svg.append(body);
         } else {

@@ -272,6 +272,76 @@ class PostScriptVmGraphicsTest {
     }
 
     @Test
+    void closedStrokeRemainsStroke() {
+        PostScriptVm vm = new PostScriptVm();
+        vm.getDocumentBuilder().setBoundingBox(new com.convert2web.model.BoundingBox(0, 0, 100, 100));
+        VmGraphicsState state = vm.getGraphicsState();
+        state.setStrokeColor(PaintStyle.rgb(0.1, 0.1, 0.1));
+        state.appendRectangle(5, 5, 90, 90);
+        vm.getDocumentRecorder().recordStroke(state);
+
+        EpsDocument doc = vm.getDocument();
+        assertEquals(1, doc.getCommands().size());
+        assertInstanceOf(GraphicsCommand.Stroke.class, doc.getCommands().get(0));
+    }
+
+    @Test
+    void inverseMaskClipKeepsPageSubpathOnly() {
+        PostScriptVm vm = new PostScriptVm();
+        vm.getDocumentBuilder().setBoundingBox(new com.convert2web.model.BoundingBox(0, 0, 100, 100));
+        VmGraphicsState state = vm.getGraphicsState();
+        state.moveTo(10, 10);
+        state.lineTo(90, 10);
+        state.lineTo(90, 90);
+        state.lineTo(10, 90);
+        state.closePath();
+        state.moveTo(-200, -200);
+        state.lineTo(300, -200);
+        state.lineTo(300, 300);
+        state.lineTo(-200, 300);
+        state.closePath();
+        vm.getDocumentRecorder().recordClip(state, WindingRule.NON_ZERO);
+
+        GraphicsCommand.Clip clip = (GraphicsCommand.Clip) vm.getDocument().getCommands().get(0);
+        assertEquals(WindingRule.NON_ZERO, clip.getWindingRule());
+        assertEquals(1, countMoveTos(clip.getPath()));
+        double[] b = com.convert2web.model.PathBounds.transformedBounds(
+                clip.getPath(), clip.getCtm());
+        assertEquals(80, b[2] - b[0], 0.01);
+        assertEquals(80, b[3] - b[1], 0.01);
+    }
+
+    private static int countMoveTos(Path path) {
+        int count = 0;
+        for (com.convert2web.model.PathSegment segment : path.getSegments()) {
+            if (segment instanceof com.convert2web.model.PathSegment.MoveTo) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    @Test
+    void whiteCoverTileFillRecordedInPaintOrder() {
+        PostScriptVm vm = new PostScriptVm();
+        vm.getDocumentBuilder().setBoundingBox(new com.convert2web.model.BoundingBox(0, 0, 100, 100));
+        String source =
+                "10 10 moveto 50 10 lineto 50 40 lineto 10 40 lineto closepath 1 setgray fill "
+                        + "10 10 moveto 50 10 lineto 50 40 lineto 10 40 lineto closepath "
+                        + "0.03 setgray stroke";
+        try (PostScriptLexer lexer = new PostScriptLexer(new StringReader(source))) {
+            vm.executeAll(new PostScriptParser().parseAll(lexer));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        EpsDocument doc = vm.getDocument();
+
+        assertEquals(2, doc.getCommands().size());
+        assertInstanceOf(GraphicsCommand.Fill.class, doc.getCommands().get(0));
+        assertInstanceOf(GraphicsCommand.Stroke.class, doc.getCommands().get(1));
+    }
+
+    @Test
     void pendingLegendTextWaitsForCoverTileAcrossOtherImages() {
         PostScriptVm vm = new PostScriptVm();
         vm.getDocumentRecorder().recordText(

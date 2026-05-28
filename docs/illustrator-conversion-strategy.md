@@ -65,6 +65,34 @@ Future work: implement complete `/DS` execution in the PostScript VM instead of 
 4. Correct execution of arbitrary `/DS` procedures or names beyond `cf ... fl ... filter`.
 5. Clear diagnostics when a `/DS` program is unsupported, including operator, dimensions, and dictionary summary.
 
+## Current SVG fidelity notes
+
+Keep fixes at the interpreter, graphics-state, document-model, or renderer layer.
+Do not add file-specific path or color rewrites.
+
+- Illustrator `@` is `/stroke ldf`; keep it as a stroke even when the path is closed.
+- DTP white cover tiles are real painted rectangles. Preserve them in stream order.
+- Some Illustrator clips combine a page-sized subpath with a much larger outer mask loop.
+  For SVG output, keep the page-sized subpath and drop the huge outer loop so the
+  page interior remains visible.
+- SVG element ids must be NCNames (for example `e1`, `e2`) and `<style>` must include
+  `type="text/css"` for DTD validation.
+
+## CLI and batch workflow
+
+All valued CLI options use equals syntax:
+
+```bash
+--min-width=100 --min-height=100 --substitute-fonts=no --glob='*.eps'
+```
+
+Batch mode reuses one JVM and preserves input subdirectories:
+
+```bash
+java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar \
+  --batch --substitute-fonts=no /path/to/eps-dir /path/to/svg-dir
+```
+
 ## Entry points
 
 - `BinaryEpsConverter.tryConvert` → `AdobeIllustratorPageRunner.convertIllustratorPostScript`

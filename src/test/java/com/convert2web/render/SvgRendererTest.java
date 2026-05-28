@@ -33,7 +33,7 @@ class SvgRendererTest {
         assertTrue(svg.contains("viewBox=\"0 0 10 10\""));
         assertTrue(svg.contains("width=\"10\""));
         assertTrue(svg.contains("height=\"10\""));
-        assertTrue(svg.contains("<style>image{image-rendering:pixelated;}</style>"));
+        assertTrue(svg.contains("<style type=\"text/css\">image{image-rendering:pixelated;}</style>"));
     }
 
     @Test
@@ -575,7 +575,7 @@ class SvgRendererTest {
         String svg = new SvgRenderer().render(document);
         assertTrue(svg.contains("<clipPath"));
         assertTrue(svg.contains("clip-path=\"url(#"));
-        assertTrue(Pattern.compile("<image[^>]*clip-path=\"url\\(#\\d+\\)\"").matcher(svg).find());
+        assertTrue(Pattern.compile("<image[^>]*clip-path=\"url\\(#e\\d+\\)\"").matcher(svg).find());
     }
 
     @Test

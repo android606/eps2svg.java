@@ -7,6 +7,7 @@ import com.convert2web.model.Matrix;
 import com.convert2web.model.PaintStyle;
 import com.convert2web.model.Path;
 import com.convert2web.model.PathBounds;
+import com.convert2web.model.PathSegment;
 import com.convert2web.model.SourceSpan;
 import com.convert2web.model.WindingRule;
 
@@ -18,6 +19,8 @@ import java.util.List;
  */
 public final class EpsDocumentRecorder {
     private static final int COVER_TILE_TEXT_LOOKBACK = 80;
+    private static final double INVERSE_MASK_CLIP_AREA_MULTIPLIER = 4.0;
+    private static final double PAGE_CLIP_MIN_DIMENSION_RATIO = 0.5;
 
     private final PostScriptVm vm;
     private final EpsDocumentBuilder builder;
@@ -122,17 +125,80 @@ public final class EpsDocumentRecorder {
                 && pathH >= pageH * 0.75;
     }
 
+    /** Compound clip: page loop plus a much larger outer loop (Illustrator mask export). */
+    private static boolean isInverseMaskClip(Path path, Matrix ctm, BoundingBox page) {
+        if (page == null || countMoveTos(path) < 2) {
+            return false;
+        }
+        double[] bounds = PathBounds.transformedBounds(path, ctm);
+        double pathArea = Math.max(0, bounds[2] - bounds[0]) * Math.max(0, bounds[3] - bounds[1]);
+        double pageArea = page.getWidth() * page.getHeight();
+        return pageArea > 0 && pathArea > pageArea * INVERSE_MASK_CLIP_AREA_MULTIPLIER;
+    }
+
+    /**
+     * Keep only the subpath whose bounds match the EPS page; drop the huge outer mask loop.
+     */
+    private static Path extractPageBorderClipSubpath(Path path, Matrix ctm, BoundingBox page) {
+        double pageW = page.getWidth();
+        double pageH = page.getHeight();
+        Path best = null;
+        double bestScore = Double.POSITIVE_INFINITY;
+        for (Path subpath : splitSubpaths(path)) {
+            double[] b = PathBounds.transformedBounds(subpath, ctm);
+            double w = b[2] - b[0];
+            double h = b[3] - b[1];
+            if (w < pageW * PAGE_CLIP_MIN_DIMENSION_RATIO
+                    || h < pageH * PAGE_CLIP_MIN_DIMENSION_RATIO) {
+                continue;
+            }
+            double score = Math.abs(w - pageW) + Math.abs(h - pageH);
+            if (score < bestScore) {
+                bestScore = score;
+                best = subpath;
+            }
+        }
+        return best != null ? best : path;
+    }
+
+    private static List<Path> splitSubpaths(Path path) {
+        List<Path> subpaths = new ArrayList<>();
+        List<PathSegment> current = new ArrayList<>();
+        for (PathSegment segment : path.getSegments()) {
+            if (segment instanceof PathSegment.MoveTo && !current.isEmpty()) {
+                subpaths.add(new Path(current));
+                current = new ArrayList<>();
+            }
+            current.add(segment);
+        }
+        if (!current.isEmpty()) {
+            subpaths.add(new Path(current));
+        }
+        return subpaths;
+    }
+
+    private static int countMoveTos(Path path) {
+        int count = 0;
+        for (PathSegment segment : path.getSegments()) {
+            if (segment instanceof PathSegment.MoveTo) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     public void recordStroke(VmGraphicsState state) {
         Path path = state.snapshotPath();
         if (path.isEmpty()) {
             state.clearPath();
             return;
         }
+        Matrix ctm = state.getCtm();
         builder.addStroke(
                 path,
                 state.getStrokeColor(),
                 state.getStrokeStyle(),
-                state.getCtm(),
+                ctm,
                 vm.getCurrentSourceSpan().orElse(null));
         state.clearPath();
     }
@@ -144,9 +210,14 @@ public final class EpsDocumentRecorder {
             return;
         }
         Matrix ctm = state.getCtm();
+        BoundingBox page = builder.getBoundingBox();
+        Path clipPath = path;
+        if (isInverseMaskClip(path, ctm, page)) {
+            clipPath = extractPageBorderClipSubpath(path, ctm, page);
+        }
         SourceSpan sourceSpan = vm.getCurrentSourceSpan().orElse(null);
-        clipStack.add(new GraphicsCommand.Clip(path, windingRule, ctm, sourceSpan));
-        builder.addClip(path, windingRule, ctm, sourceSpan);
+        clipStack.add(new GraphicsCommand.Clip(clipPath, windingRule, ctm, sourceSpan));
+        builder.addClip(clipPath, windingRule, ctm, sourceSpan);
         state.incrementClipDepth();
         state.clearPath();
     }

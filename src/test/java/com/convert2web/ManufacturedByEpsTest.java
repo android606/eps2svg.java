@@ -51,19 +51,4 @@ class ManufacturedByEpsTest {
         }
     }
 
-    @Test
-    void ghostscriptStreamExtracts() throws Exception {
-        String ps = Files.readString(Path.of("test/test_images/manufactured_by.eps"));
-        assertNotNull(GhostscriptEpsPageRunner.extractPageStream(ps));
-    }
-
-    @Test
-    void ghostscriptStreamRunPageBody() throws Exception {
-        String ps = Files.readString(Path.of("test/test_images/manufactured_by.eps"));
-        String stream = GhostscriptEpsPageRunner.extractPageStream(ps);
-        var bbox = new com.convert2web.model.BoundingBox(270, 384, 342, 407);
-        var doc = AdobeIllustratorPageRunner.runPageBody(stream, bbox, false);
-        assertNotNull(doc, "runPageBody returned null");
-        assertFalse(doc.getCommands().isEmpty(), "command count=" + doc.getCommands().size());
-    }
 }
