@@ -394,7 +394,7 @@ class SvgRendererTest {
                         new double[] {2.95264, 3.05762, 0})
                 .build();
         String svg = new SvgRenderer().render(document);
-        assertTrue(svg.contains("font-family=\"Raleway, sans-serif\""), svg);
+        assertTrue(svg.contains("font-family=\"'SLWDMH+Raleway-SemiBold', sans-serif\""), svg);
         assertTrue(svg.contains("font-weight=\"600\""), svg);
         assertTrue(svg.contains("font-size=\"5.2447"), svg);
         assertTrue(svg.contains("transform=\"translate(17.5552 109.323)\""), svg);
@@ -440,6 +440,118 @@ class SvgRendererTest {
         String svg = new SvgRenderer().render(document);
         assertTrue(svg.contains("<tspan x=\"0 3\""), svg);
         assertTrue(svg.contains(">AB</tspan>"));
+    }
+
+    @Test
+    void fontMetricsAutoOmitsPerGlyphSpacing() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 100, 100))
+                .addText(
+                        "AB",
+                        10,
+                        20,
+                        "Helvetica",
+                        12,
+                        PaintStyle.rgb(0, 0, 0),
+                        Matrix.identity(),
+                        new double[] {3, 4, 0})
+                .build();
+        SvgRenderOptions options = SvgRenderOptions.builder()
+                .fontMetricsMode(SvgRenderOptions.FontMetricsMode.AUTO)
+                .build();
+        String svg = new SvgRenderer(options).render(document);
+        assertFalse(svg.contains("<tspan"), svg);
+        assertTrue(svg.contains(">AB</text>"), svg);
+        assertTrue(svg.contains("transform=\"translate(10 20)\""), svg);
+    }
+
+    @Test
+    void relativeFontMetricsEmitsDxCorrectionsAndSubstituteFirst() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 100, 100))
+                .addText(
+                        "AB",
+                        10,
+                        20,
+                        "MissingProductionSans",
+                        12,
+                        PaintStyle.rgb(0, 0, 0),
+                        Matrix.identity(),
+                        new double[] {3, 4, 0})
+                .build();
+        SvgRenderOptions options = SvgRenderOptions.builder()
+                .substituteFonts(true)
+                .build();
+        String svg = new SvgRenderer(options).render(document);
+        assertTrue(svg.contains("<tspan dx=\"0 "), svg);
+        assertFalse(svg.contains("<tspan x=\""), svg);
+        assertTrue(svg.contains("MissingProductionSans"), svg);
+        assertTrue(svg.contains("EPS font report"), svg);
+    }
+
+    @Test
+    void relativeFontMetricsWithoutSubstitutionKeepsSourceFamily() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 100, 100))
+                .addText(
+                        "AB",
+                        10,
+                        20,
+                        "MissingProductionSans",
+                        12,
+                        PaintStyle.rgb(0, 0, 0),
+                        Matrix.identity(),
+                        new double[] {3, 4, 0})
+                .build();
+        SvgRenderOptions options = SvgRenderOptions.builder()
+                .fontMetricsMode(SvgRenderOptions.FontMetricsMode.RELATIVE)
+                .build();
+        String svg = new SvgRenderer(options).render(document);
+        assertTrue(svg.contains("<tspan dx=\"0 "), svg);
+        assertTrue(svg.contains("font-family=\"MissingProductionSans, sans-serif\""), svg);
+    }
+
+    @Test
+    void substitutedCondensedLightFontPreservesWeightAndStretch() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 100, 100))
+                .addText(
+                        "In Range Result",
+                        10,
+                        20,
+                        "Abadi MT Condensed Light",
+                        12,
+                        PaintStyle.rgb(0, 0, 0),
+                        Matrix.identity())
+                .build();
+        SvgRenderOptions options = SvgRenderOptions.builder()
+                .substituteFonts(true)
+                .fontMetricsMode(SvgRenderOptions.FontMetricsMode.AUTO)
+                .build();
+        String svg = new SvgRenderer(options).render(document);
+        assertTrue(svg.contains("font-weight=\"300\""), svg);
+        assertTrue(svg.contains("font-stretch=\"condensed\""), svg);
+    }
+
+    @Test
+    void substitutedMediumFontPreservesWeight() {
+        EpsDocument document = new EpsDocumentBuilder()
+                .setBoundingBox(new BoundingBox(0, 0, 100, 100))
+                .addText(
+                        "Range Indicator Notes",
+                        10,
+                        20,
+                        "Gotham-Medium",
+                        12,
+                        PaintStyle.rgb(0, 0, 0),
+                        Matrix.identity())
+                .build();
+        SvgRenderOptions options = SvgRenderOptions.builder()
+                .substituteFonts(true)
+                .fontMetricsMode(SvgRenderOptions.FontMetricsMode.AUTO)
+                .build();
+        String svg = new SvgRenderer(options).render(document);
+        assertTrue(svg.contains("font-weight=\"500\""), svg);
     }
 
     @Test

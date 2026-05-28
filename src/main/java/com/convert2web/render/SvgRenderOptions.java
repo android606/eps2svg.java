@@ -9,27 +9,52 @@ import java.util.Optional;
  * {@code viewBox} is not modified; scaling is always proportional.
  */
 public final class SvgRenderOptions {
+    public enum FontMetricsMode {
+        RELATIVE,
+        ABSOLUTE,
+        AUTO;
+
+        public static FontMetricsMode parse(String value) {
+            if ("relative".equalsIgnoreCase(value)) {
+                return RELATIVE;
+            }
+            if ("absolute".equalsIgnoreCase(value)) {
+                return ABSOLUTE;
+            }
+            if ("auto".equalsIgnoreCase(value)) {
+                return AUTO;
+            }
+            throw new IllegalArgumentException("Unknown font metrics mode: " + value);
+        }
+    }
+
     private final Length minWidth;
     private final Length minHeight;
     private final Length maxWidth;
     private final Length maxHeight;
     private final boolean emitSourceTrace;
+    private final boolean substituteFonts;
+    private final FontMetricsMode fontMetricsMode;
 
     private SvgRenderOptions(
             Length minWidth,
             Length minHeight,
             Length maxWidth,
             Length maxHeight,
-            boolean emitSourceTrace) {
+            boolean emitSourceTrace,
+            boolean substituteFonts,
+            FontMetricsMode fontMetricsMode) {
         this.minWidth = minWidth;
         this.minHeight = minHeight;
         this.maxWidth = maxWidth;
         this.maxHeight = maxHeight;
         this.emitSourceTrace = emitSourceTrace;
+        this.substituteFonts = substituteFonts;
+        this.fontMetricsMode = fontMetricsMode;
     }
 
     public static SvgRenderOptions none() {
-        return new SvgRenderOptions(null, null, null, null, false);
+        return builder().build();
     }
 
     /** Defaults for CLI tests and shell scripts: min 100px, max US letter size. */
@@ -71,12 +96,22 @@ public final class SvgRenderOptions {
         return emitSourceTrace;
     }
 
+    public boolean substituteFonts() {
+        return substituteFonts;
+    }
+
+    public FontMetricsMode fontMetricsMode() {
+        return fontMetricsMode;
+    }
+
     public static final class Builder {
         private Length minWidth;
         private Length minHeight;
         private Length maxWidth;
         private Length maxHeight;
         private boolean emitSourceTrace;
+        private boolean substituteFonts;
+        private FontMetricsMode fontMetricsMode;
 
         public Builder minWidth(String length) {
             this.minWidth = length == null ? null : Length.parse(length);
@@ -103,8 +138,32 @@ public final class SvgRenderOptions {
             return this;
         }
 
+        public Builder substituteFonts(boolean substituteFonts) {
+            this.substituteFonts = substituteFonts;
+            if (fontMetricsMode == null && substituteFonts) {
+                this.fontMetricsMode = FontMetricsMode.RELATIVE;
+            }
+            return this;
+        }
+
+        public Builder fontMetricsMode(FontMetricsMode fontMetricsMode) {
+            this.fontMetricsMode = fontMetricsMode;
+            return this;
+        }
+
         public SvgRenderOptions build() {
-            return new SvgRenderOptions(minWidth, minHeight, maxWidth, maxHeight, emitSourceTrace);
+            FontMetricsMode effectiveFontMetricsMode = fontMetricsMode;
+            if (effectiveFontMetricsMode == null) {
+                effectiveFontMetricsMode = substituteFonts ? FontMetricsMode.RELATIVE : FontMetricsMode.ABSOLUTE;
+            }
+            return new SvgRenderOptions(
+                    minWidth,
+                    minHeight,
+                    maxWidth,
+                    maxHeight,
+                    emitSourceTrace,
+                    substituteFonts,
+                    effectiveFontMetricsMode);
         }
     }
 }

@@ -21,7 +21,9 @@ import java.nio.file.Files;
 import java.util.ArrayDeque;
 import java.util.Base64;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Renders {@link EpsDocument} to SVG XML without depending on Batik.
@@ -78,6 +80,7 @@ public final class SvgRenderer {
 
         StringBuilder defs = new StringBuilder();
         StringBuilder body = new StringBuilder();
+        Map<String, SvgFontMetrics.FontChoice> fontReport = collectFontReport(document);
         Deque<ClipFrame> clipFrames = new ArrayDeque<>();
         Deque<String> layerGroupIds = new ArrayDeque<>();
         ElementIds elementIds = new ElementIds();
@@ -182,6 +185,7 @@ public final class SvgRenderer {
         if (defs.length() > 0) {
             svg.append("<defs>\n").append(defs).append("</defs>\n");
         }
+        appendFontReportComment(svg, fontReport);
         svg.append("<style>image{image-rendering:pixelated;}</style>\n");
         if (pageTransform.isEmpty()) {
             svg.append(body);
@@ -193,6 +197,44 @@ public final class SvgRenderer {
         }
         svg.append("</svg>\n");
         return svg.toString();
+    }
+
+    private Map<String, SvgFontMetrics.FontChoice> collectFontReport(EpsDocument document) {
+        Map<String, SvgFontMetrics.FontChoice> fonts = new LinkedHashMap<>();
+        for (GraphicsCommand command : document.getCommands()) {
+            if (command instanceof GraphicsCommand.Text) {
+                GraphicsCommand.Text text = (GraphicsCommand.Text) command;
+                SvgFontMetrics.FontChoice choice = SvgFontMetrics.chooseFont(
+                        text.getFontName(), text.getFontSize(), shouldResolveFont(options));
+                fonts.putIfAbsent(choice.sourceFamily(), choice);
+            }
+        }
+        return fonts;
+    }
+
+    private static void appendFontReportComment(
+            StringBuilder svg,
+            Map<String, SvgFontMetrics.FontChoice> fontReport) {
+        if (fontReport.isEmpty()) {
+            return;
+        }
+        svg.append("<!-- EPS font report:\n");
+        for (SvgFontMetrics.FontChoice choice : fontReport.values()) {
+            svg.append("  ")
+                    .append(xmlCommentSafe(choice.sourceFamily()))
+                    .append(" -> ");
+            if (choice.resolvedFamily() == null || !choice.substituted()) {
+                svg.append("not substituted");
+            } else {
+                svg.append(xmlCommentSafe(choice.resolvedFamily()));
+            }
+            svg.append('\n');
+        }
+        svg.append("-->\n");
+    }
+
+    private static String xmlCommentSafe(String value) {
+        return (value == null ? "" : value).replace("--", "- -");
     }
 
     private static void openPendingClips(
@@ -304,17 +346,25 @@ public final class SvgRenderer {
             element.append(" y=\"").append(SvgPathEncoder.format(y)).append('"');
         }
         element.append(" font-size=\"").append(SvgPathEncoder.format(fontSize)).append('"');
-        element.append(" font-family=\"").append(escapeAttr(svgFontFamily(text.getFontName()))).append('"');
-        String fontWeight = svgFontWeight(text.getFontName());
+        SvgFontMetrics.FontChoice fontChoice = SvgFontMetrics.chooseFont(
+                text.getFontName(), fontSize, shouldResolveFont(options));
+        element.append(" font-family=\"")
+                .append(escapeAttr(svgFontFamily(text.getFontName(), fontChoice, options)))
+                .append('"');
+        String fontWeight = svgFontWeight(fontChoice);
         if (!fontWeight.isEmpty()) {
             element.append(" font-weight=\"").append(fontWeight).append('"');
+        }
+        String fontStretch = svgFontStretch(fontChoice);
+        if (!fontStretch.isEmpty()) {
+            element.append(" font-stretch=\"").append(fontStretch).append('"');
         }
         if (IllustratorTextPaint.isItalicFont(text.getFontName())) {
             element.append(" font-style=\"italic\"");
         }
         element.append(paintAttrs(text.getFill(), true));
         element.append('>');
-        appendTextContent(element, text);
+        appendTextContent(element, text, fontChoice, options);
         element.append("</text>\n");
         return element.toString();
     }
@@ -360,16 +410,29 @@ public final class SvgRenderer {
                 + SvgPathEncoder.format(ctm.transformY(x, y)) + ')';
     }
 
-    private static void appendTextContent(StringBuilder element, GraphicsCommand.Text text) {
+    private static void appendTextContent(
+            StringBuilder element,
+            GraphicsCommand.Text text,
+            SvgFontMetrics.FontChoice fontChoice,
+            SvgRenderOptions options) {
         String value = text.getText();
         double[] advances = text.getGlyphAdvances();
-        if (advances == null || advances.length == 0 || value.length() <= 1) {
+        if (advances == null
+                || advances.length == 0
+                || value.length() <= 1
+                || options.fontMetricsMode() == SvgRenderOptions.FontMetricsMode.AUTO) {
             element.append(escapeText(value));
             return;
         }
-        // Illustrator xsh / PostScript xshow: each offset is the full x displacement to the
-        // next glyph origin (replaces font default width). SVG dx adds to default width, so use
-        // absolute per-glyph x coordinates instead.
+        if (options.fontMetricsMode() == SvgRenderOptions.FontMetricsMode.RELATIVE) {
+            String dx = relativeDxPositions(text, fontChoice, advances);
+            if (!dx.isEmpty()) {
+                element.append("<tspan dx=\"").append(dx).append("\">");
+                element.append(escapeText(value));
+                element.append("</tspan>");
+                return;
+            }
+        }
         StringBuilder xPositions = new StringBuilder("0");
         double cumulative = 0;
         for (int i = 0; i < value.length() - 1; i++) {
@@ -383,39 +446,117 @@ public final class SvgRenderer {
         element.append("</tspan>");
     }
 
+    private static String relativeDxPositions(
+            GraphicsCommand.Text text,
+            SvgFontMetrics.FontChoice fontChoice,
+            double[] epsAdvances) {
+        String family = fontChoice.resolvedFamily();
+        if (family == null || family.isEmpty()) {
+            return "";
+        }
+        double[] measured = SvgFontMetrics.glyphAdvances(
+                family, text.getFontName(), text.getFontSize(), text.getText());
+        if (measured.length == 0) {
+            return "";
+        }
+        StringBuilder dx = new StringBuilder("0");
+        int count = Math.min(Math.min(text.getText().length() - 1, epsAdvances.length), measured.length);
+        for (int i = 0; i < count; i++) {
+            dx.append(' ').append(SvgPathEncoder.format(epsAdvances[i] - measured[i]));
+        }
+        return dx.toString();
+    }
+
     private static double effectiveFontSize(double fontSize, Matrix ctm) {
         double sx = Math.hypot(ctm.getA(), ctm.getB());
         double sy = Math.hypot(ctm.getC(), ctm.getD());
         return fontSize * Math.max(sx, sy);
     }
 
-    private static String svgFontFamily(String fontName) {
-        String name = fontName.startsWith("/") ? fontName.substring(1) : fontName;
-        if (name.contains("Raleway")) {
-            return "Raleway, sans-serif";
-        }
-        if (name.contains("Gotham")) {
-            return "Gotham, Arial, sans-serif";
-        }
-        if (name.contains("Helvetica") || name.contains("Arial")) {
-            return "Helvetica, Arial, sans-serif";
-        }
-        if (name.contains("Times")) {
-            return "Times New Roman, Times, serif";
-        }
-        if (name.contains("Courier")) {
-            return "Courier New, Courier, monospace";
-        }
-        return name + ", sans-serif";
+    private static boolean shouldResolveFont(SvgRenderOptions options) {
+        return options.substituteFonts()
+                || options.fontMetricsMode() == SvgRenderOptions.FontMetricsMode.RELATIVE;
     }
 
-    private static String svgFontWeight(String fontName) {
-        String name = fontName.startsWith("/") ? fontName.substring(1) : fontName;
-        if (name.contains("SemiBold") || name.contains("DemiBold") || name.contains("Bold")) {
-            return "600";
+    private static String svgFontFamily(
+            String fontName,
+            SvgFontMetrics.FontChoice fontChoice,
+            SvgRenderOptions options) {
+        String name = fontName == null || fontName.isEmpty() ? "Helvetica" : fontName;
+        if (name.startsWith("/")) {
+            name = name.substring(1);
         }
-        if (name.contains("Medium")) {
-            return "500";
+        if (!options.substituteFonts() || !fontChoice.substituted()) {
+            return cssFontFamily(name) + ", " + genericFallback(name);
+        }
+        String source = SvgFontMetrics.sourceFamily(name);
+        if (fontChoice.resolvedFamily() != null && fontChoice.substituted()) {
+            return cssFontFamily(fontChoice.resolvedFamily())
+                    + ", "
+                    + cssFontFamily(source)
+                    + ", "
+                    + genericFallback(source);
+        }
+        if (name.contains("Raleway")) {
+            return cssFontFamily(name) + ", sans-serif";
+        }
+        if (name.contains("Gotham")) {
+            return cssFontFamily(name) + ", Arial, sans-serif";
+        }
+        if (name.contains("Helvetica") || name.contains("Arial")) {
+            return cssFontFamily(name) + ", Arial, sans-serif";
+        }
+        if (name.contains("Times")) {
+            return cssFontFamily(name) + ", Times New Roman, Times, serif";
+        }
+        if (name.contains("Courier")) {
+            return cssFontFamily(name) + ", Courier New, Courier, monospace";
+        }
+        return cssFontFamily(name) + ", sans-serif";
+    }
+
+    private static String cssFontFamily(String family) {
+        if (family == null || family.isEmpty()) {
+            return "sans-serif";
+        }
+        if (family.matches("[A-Za-z_][A-Za-z0-9_-]*")) {
+            return family;
+        }
+        return "'" + family.replace("'", "\\'") + "'";
+    }
+
+    private static String genericFallback(String family) {
+        String name = family == null ? "" : family.toLowerCase(java.util.Locale.ROOT);
+        if (name.contains("times") || name.contains("serif")) {
+            return "serif";
+        }
+        if (name.contains("courier") || name.contains("mono")) {
+            return "monospace";
+        }
+        return "sans-serif";
+    }
+
+    private static String svgFontWeight(SvgFontMetrics.FontChoice fontChoice) {
+        int weight = fontChoice.traits().weight();
+        if (weight != 400) {
+            return Integer.toString(weight);
+        }
+        return "";
+    }
+
+    private static String svgFontStretch(SvgFontMetrics.FontChoice fontChoice) {
+        int width = fontChoice.traits().width();
+        if (width <= 65) {
+            return "extra-condensed";
+        }
+        if (width <= 80) {
+            return "condensed";
+        }
+        if (width <= 90) {
+            return "semi-condensed";
+        }
+        if (width >= 120) {
+            return "expanded";
         }
         return "";
     }

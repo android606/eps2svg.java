@@ -1949,13 +1949,19 @@
            id="tspan67"
            style="font-variant:normal;font-weight:500;font-size:9px;font-family:Gotham-Medium;writing-mode:lr-tb;fill:#231f20;fill-opacity:1;fill-rule:nonzero;stroke:none"
            x="123.0093"
-           dx="0 0.2067138 -0.030541951 0.15255091 0.1609371 0.1104129 0.1095948"
-           y="18.996849">Example</tspan><tspan
+           y="18.996849">Example</tspan>
+         
+         
+         <tspan
            id="tspan68"
-           style="font-variant:normal;font-weight:normal;font-size:9px;font-family:GothamXNarrow-Book;writing-mode:lr-tb;fill:#231f20;fill-opacity:1;fill-rule:nonzero;stroke:none"
+ style="font-variant:normal;font-weight:normal;font-size:9px;font-family:GothamXNarrow-Book;writing-mode:lr-tb;fill:#231f20;fill-opacity:1;fill-rule:nonzero;stroke:none"
            x="116.54211"
            dx="0 0.2245239 0.2258181 0.22426739 0.2253051 0.22453649 0.22484159 0.2259279 0.2242557 0.2252565 0.13447259 0.2242557 0.22542749 0.22485331 0.2250486"
-           y="29.996849">In Range Result</tspan><tspan
+           y="29.996849">In Range Result</tspan>
+         
+         
+         
+         <tspan
            id="tspan69"
            style="font-variant:normal;font-weight:normal;font-size:9px;font-family:GothamXNarrow-Book;writing-mode:lr-tb;fill:#231f20;fill-opacity:1;fill-rule:nonzero;stroke:none"
            x="12.70711"

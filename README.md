@@ -25,6 +25,13 @@ java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar \
   input.eps output.svg
 ```
 
+Batch mode (one JVM, recursive `**/*.eps` by default):
+
+```bash
+java -jar target/eps2svg-1.0-SNAPSHOT-jar-with-dependencies.jar \
+  --batch --substitute-fonts=no /path/to/eps-dir /path/to/svg-dir
+```
+
 ## Plan
 
 See [docs/ascii-eps-interpreter-plan.md](docs/ascii-eps-interpreter-plan.md).

@@ -42,6 +42,16 @@ public class EpsToSvgConverter {
             System.exit(1);
         }
 
+        if (command.batch()) {
+            try {
+                System.exit(new Eps2SvgBatchRunner(command).run());
+            } catch (IOException e) {
+                System.err.println("Batch failed: " + e.getMessage());
+                System.exit(1);
+            }
+            return;
+        }
+
         try {
             new EpsToSvgConverter(command.renderOptions()).convert(command.inputPath(), command.outputPath());
             System.out.println("Conversion successful: " + command.outputPath());
